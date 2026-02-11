@@ -1,5 +1,5 @@
 httpx==0.27.2
-openai==1.51.2
+openai==2.20.0
 pennylane==0.38.0
 autoray==0.6.12
 textual==0.79.1
