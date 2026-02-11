@@ -4,7 +4,6 @@
   --glass: rgba(255, 255, 255, 0.1);
   --line: rgba(255, 255, 255, 0.25);
 }
-
 * { box-sizing: border-box; }
 body {
   margin: 0;
@@ -15,63 +14,49 @@ body {
               linear-gradient(125deg, var(--bg1), var(--bg2));
   color: #eaf3ff;
 }
-.hf-shell {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 2rem;
-}
+.hf-shell { min-height: 100vh; display: grid; place-items: center; padding: 1.5rem; }
 .glass-card {
-  width: min(980px, 96vw);
+  width: min(1100px, 97vw);
   border: 1px solid var(--line);
-  border-radius: 26px;
-  padding: 2rem;
+  border-radius: 24px;
+  padding: 1.25rem;
   background: var(--glass);
   backdrop-filter: blur(14px) saturate(145%);
-  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.45);
 }
-.title {
-  font-size: clamp(2rem, 4vw, 3rem);
-  margin-bottom: .4rem;
-}
-.subtitle { color: #c6d7ee; margin-bottom: 1.4rem; }
-.hf-form { display: flex; flex-wrap: wrap; gap: .8rem; align-items: center; }
+.title { font-size: clamp(1.8rem, 3vw, 2.6rem); margin-bottom: .2rem; }
+.subtitle { color: #c6d7ee; margin-bottom: .8rem; }
+.hf-form { display: flex; gap: .7rem; flex-wrap: wrap; }
 .input-wrap {
-  display: flex;
-  align-items: center;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: .65rem 1rem;
-  min-width: min(420px, 100%);
+  display: flex; align-items: center; min-width: min(420px, 100%);
+  border: 1px solid var(--line); border-radius: 999px; padding: .5rem .85rem;
   background: rgba(0,0,0,.15);
 }
-.input-wrap input {
-  border: none;
-  background: transparent;
-  color: #eff6ff;
-  font-size: 1.1rem;
-  outline: none;
-  width: 100%;
-}
+.input-wrap input { border: none; background: transparent; color: #eff6ff; outline: none; width: 100%; }
 .at { margin-right: .45rem; opacity: .85; }
-.result {
-  border: 1px solid rgba(255,255,255,.18);
-  border-radius: 20px;
-  padding: 1rem 1.2rem;
-  background: rgba(0, 0, 0, .18);
+.mini-actions { display:flex; gap:.5rem; flex-wrap: wrap; }
+.status {
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 10px;
+  padding: .45rem .65rem;
+  background: rgba(0,0,0,.2);
 }
+.nav-tabs .nav-link { color: #d8e5f8; }
+.nav-tabs .nav-link.active { background: rgba(255,255,255,.12); color: #fff; border-color: rgba(255,255,255,.3); }
+.result { border: 1px solid rgba(255,255,255,.18); border-radius: 16px; padding: .9rem; background: rgba(0, 0, 0, .18); }
 .headline { display: flex; justify-content: space-between; align-items: center; }
 .meta { color: #c8dbf7; }
-.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem; }
-.axis-head { display: flex; justify-content: space-between; font-size: .95rem; }
+.grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.8rem; }
+.axis-head { display: flex; justify-content: space-between; }
 .bar { background: rgba(255,255,255,.15); border-radius: 10px; height: 9px; overflow: hidden; }
 .bar-fill { height: 100%; background: linear-gradient(90deg, #6ce5ff, #6f8dff); }
-.quantum-box {
+.quantum-box, .item-card, .trips, pre {
   border: 1px solid rgba(255,255,255,.22);
   background: rgba(10, 20, 45, .45);
-  border-radius: 16px;
-  padding: 1rem;
+  border-radius: 12px;
+  padding: .75rem;
 }
+.item-card { margin-bottom: .6rem; }
+pre { white-space: pre-wrap; color: #dfefff; }
 .mode-pill {
   display: inline-block;
   padding: .1rem .5rem;
@@ -80,32 +65,10 @@ body {
   margin-right: .35rem;
   font-size: .85rem;
 }
-.outlook-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: .9rem;
-}
-.outlook {
-  border: 1px solid rgba(255,255,255,.2);
-  border-radius: 14px;
-  padding: .8rem;
-  background: rgba(0,0,0,.2);
-}
-.outlook h4 { font-size: 1rem; }
+.outlook-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap:.8rem; }
+.outlook { border: 1px solid rgba(255,255,255,.2); border-radius: 12px; padding: .7rem; background: rgba(0,0,0,.2); }
 .milestone { color: #b8defc; font-size: .9rem; }
-.trips {
-  border: 1px solid rgba(255,255,255,.2);
-  border-radius: 14px;
-  padding: .8rem;
-}
-.trip-card {
-  border-left: 3px solid #6ce5ff;
-  padding: .5rem .75rem;
-  margin-bottom: .65rem;
-  background: rgba(0,0,0,.2);
-  border-radius: 8px;
-}
-@media (max-width: 900px) {
-  .outlook-grid { grid-template-columns: 1fr; }
-  .grid { grid-template-columns: 1fr; }
+.trip-card { border-left: 3px solid #6ce5ff; padding: .45rem .7rem; margin-bottom: .55rem; background: rgba(0,0,0,.2); border-radius: 8px; }
+@media (max-width: 920px) {
+  .outlook-grid, .grid { grid-template-columns: 1fr; }
 }
