@@ -1,7 +1,6 @@
 # HeartFlow Web Console
 
-A Flask HeartFlow app that brings Quantum Surfaces into a browser dashboard (except post carousel).
-<img width="1280" height="2106" alt="copyImage" src="https://github.com/user-attachments/assets/90e87262-e381-4cc1-867c-ea5c7712c96e" />
+A Flask HeartFlow app that brings key TUI features into a browser dashboard (except post carousel).
 
 ## What’s in the web UI now
 
@@ -9,9 +8,11 @@ A Flask HeartFlow app that brings Quantum Surfaces into a browser dashboard (exc
 - LLM-generated synthesis (no hardwired trips/outlooks):
   - vibe summary
   - strengths / risks / advice
+  - quantum-RAG-grounded suggestion tracks + 7-day plan
   - 1/5/10-year outlook cards
   - human-trip challenge cards
 - Quantum metrics panel (ent bits, mutual bits, coherence, entropy, trajectory, dominant modes)
+- Quantum RAG surface built from tweet evidence slices (axis-tagged, weighted snippets)
 - TUI-style panels in tabs:
   - Posts
   - Trends

@@ -72,3 +72,23 @@ pre { white-space: pre-wrap; color: #dfefff; }
 @media (max-width: 920px) {
   .outlook-grid, .grid { grid-template-columns: 1fr; }
 }
+
+
+.glass-card {
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.45);
+}
+.rag-grid, .tracks-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: .7rem;
+}
+.rag-card, .track-card {
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 10px;
+  background: rgba(0,0,0,.2);
+  padding: .65rem;
+}
+.track-card h5 { margin-bottom: .35rem; }
+@media (max-width: 920px) {
+  .rag-grid, .tracks-grid { grid-template-columns: 1fr; }
+}

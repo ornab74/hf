@@ -83,6 +83,21 @@
             <p class="small">Trajectory: {{ result.quantum.trajectory }}</p>
           </div>
 
+
+          {% if result.quantum_rag_surface and result.quantum_rag_surface.top_surface %}
+          <div class="quantum-box mt-3">
+            <h3>Quantum RAG Surface (Tweet Evidence)</h3>
+            <div class="rag-grid">
+              {% for ev in result.quantum_rag_surface.top_surface %}
+              <div class="rag-card">
+                <div class="small text-info">axis={{ ev.axis }} · weight={{ ev.weight }}</div>
+                <div>{{ ev.text }}</div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
           {% if result.llm %}
           <div class="quantum-box mt-3">
             <h3>LLM Results (sanitized)</h3>
@@ -90,7 +105,25 @@
             {% if result.llm.strengths %}<p class="small text-success mb-1"><strong>Strengths</strong></p><ul>{% for s in result.llm.strengths %}<li>{{ s }}</li>{% endfor %}</ul>{% endif %}
             {% if result.llm.risks %}<p class="small text-warning mb-1"><strong>Risks</strong></p><ul>{% for r in result.llm.risks %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}
             {% if result.llm.advice %}<p class="small text-info mb-1"><strong>Advice</strong></p><ul>{% for a in result.llm.advice %}<li>{{ a }}</li>{% endfor %}</ul>{% endif %}
+            {% if result.llm.next_7_days %}<p class="small text-light mb-1"><strong>Next 7 Days</strong></p><ul>{% for d in result.llm.next_7_days %}<li>{{ d }}</li>{% endfor %}</ul>{% endif %}
           </div>
+
+
+          {% if result.llm.suggestion_tracks %}
+          <div class="quantum-box mt-3">
+            <h3>Suggestion Tracks (Quantum-RAG Grounded)</h3>
+            <div class="tracks-grid">
+              {% for tr in result.llm.suggestion_tracks %}
+              <article class="track-card">
+                <h5>{{ tr.name }}</h5>
+                <p class="small text-info">Axis: {{ tr.evidence_axis }} · Confidence: {{ (tr.confidence * 100)|round(1) }}%</p>
+                <p>{{ tr.why_now }}</p>
+                <ul>{% for a in tr.actions %}<li>{{ a }}</li>{% endfor %}</ul>
+              </article>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
 
           {% if result.llm.outlooks %}
           <div class="outlook-grid mt-3">
