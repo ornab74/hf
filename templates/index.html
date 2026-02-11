@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Find your Heartflow</title>
+  <link rel="stylesheet" href="{{ bootstrap_css.href }}" integrity="{{ bootstrap_css.integrity }}" crossorigin="anonymous">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="hf-shell">
+    <section class="glass-card" style="{% if result %}background-image: {{ result.glass }};{% endif %}">
+      <h1 class="title">Find your Heartflow</h1>
+      <p class="subtitle">Advanced quantum-inspired scoring + better-human long-range pathway.</p>
+
+      <form method="post" action="{{ url_for('analyze') }}" class="hf-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <div class="input-wrap">
+          <span class="at">@</span>
+          <input name="handle" id="handle" placeholder="elonmusk" maxlength="15" required>
+        </div>
+        <button class="btn btn-primary px-4 py-2" type="submit">Analyze</button>
+      </form>
+
+      {% if error %}
+      <div class="alert alert-danger mt-3" role="alert">{{ error }}</div>
+      {% endif %}
+
+      {% if result %}
+      <section class="result mt-4">
+        <div class="headline">
+          <h2>@{{ result.handle }}</h2>
+          <span class="badge text-bg-light">{{ result.vibe }}</span>
+        </div>
+        <p class="meta">Overall Heartflow: <strong>{{ result.overall }}%</strong> · Tweets analyzed: {{ result.tweets_used }} · Signature: {{ result.signature }}</p>
+
+        <div class="grid">
+          {% for key, value in result.axes.items() %}
+          <div class="axis">
+            <div class="axis-head"><span>{{ key }}</span><span>{{ (value * 100)|round(1) }}%</span></div>
+            <div class="bar"><div class="bar-fill" style="width: {{ (value * 100)|round(1) }}%"></div></div>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div class="quantum-box mt-4">
+          <h3>Quantum Simulation Layer</h3>
+          <p>Coherence: <strong>{{ result.quantum.coherence }}</strong> · Entropy bits: <strong>{{ result.quantum.entropy_bits }}</strong> · Entanglement bits: <strong>{{ result.quantum.entanglement_bits }}</strong></p>
+          <p class="small text-info">Dominant modes:
+            {% for mode in result.quantum.dominant_modes %}
+              <span class="mode-pill">{{ mode.axis }} {{ (mode.weight * 100)|round(1) }}%</span>
+            {% endfor %}
+          </p>
+          <p class="small">Trajectory: {{ result.quantum.trajectory }}</p>
+        </div>
+
+        <div class="outlook-grid mt-4">
+          {% for step in result.outlooks %}
+          <article class="outlook">
+            <h4>{{ step.horizon }} · {{ step.title }}</h4>
+            <p>{{ step.focus }}</p>
+            <ul>
+              {% for action in step.actions %}
+              <li>{{ action }}</li>
+              {% endfor %}
+            </ul>
+            <p class="milestone">Milestone: {{ step.milestone }}</p>
+          </article>
+          {% endfor %}
+        </div>
+
+        <div class="trips mt-4">
+          <h3>Trips to Become a Better Human</h3>
+          {% for trip in result.human_trips %}
+          <div class="trip-card">
+            <h5>{{ trip.name }}</h5>
+            <p><strong>Why:</strong> {{ trip.why }}</p>
+            <p><strong>Challenge:</strong> {{ trip.challenge }}</p>
+          </div>
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+    </section>
+  </main>
+  <script src="{{ bootstrap_js.src }}" integrity="{{ bootstrap_js.integrity }}" crossorigin="anonymous"></script>
+</body>
+</html>
