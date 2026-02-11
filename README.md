@@ -1,18 +1,29 @@
-# HeartFlow Web App
+# HeartFlow Web Console
 
-A Flask-based HeartFlow experience with advanced quantum-inspired scoring, long-horizon self-development outlooks, and a glassmorphism UI.
+A Flask HeartFlow app that brings key TUI features into a browser dashboard (except post carousel).
 
-## Features
+## What’s in the web UI now
 
-- **Beautiful web UI** with a central “Find your Heartflow” glass card.
-- **Twitter handle analysis flow** (`@handle` input).
-- **Advanced HeartFlow scoring** across six axes with deterministic signal shaping.
-- **Quantum simulation layer** (coherence, entropy bits, entanglement bits, dominant modes, trajectory).
-- **Human improvement roadmaps** with 1-year, 5-year, and 10-year outlook cards.
-- **Trips to become a better human** with challenge-oriented growth prompts.
-- **CSRF protection** using per-session cryptographic tokens.
-- **SRI enabled** for Bootstrap CSS/JS CDN assets.
-- Security response headers (`X-Frame-Options`, `X-Content-Type-Options`, etc.).
+- Handle analysis with LLM-backed 6-axis HeartFlow scoring (`SR`, `CT`, `CF`, `GDI_INV`, `CAP`, `HCS`)
+- LLM-generated synthesis (no hardwired trips/outlooks):
+  - vibe summary
+  - strengths / risks / advice
+  - quantum-RAG-grounded suggestion tracks + 7-day plan
+  - 1/5/10-year outlook cards
+  - human-trip challenge cards
+- Quantum metrics panel (ent bits, mutual bits, coherence, entropy, trajectory, dominant modes)
+- Quantum RAG surface built from tweet evidence slices (axis-tagged, weighted snippets)
+- TUI-style panels in tabs:
+  - Posts
+  - Trends
+  - HeartFlow Nodes
+  - Matrix
+  - Heatmap
+  - Clusters
+  - Drift
+  - Log
+- Batch scoring and trend scoring actions in web controls
+- Sanitization for user/model-rendered text + CSRF/session security headers
 
 ## Setup
 
@@ -20,9 +31,15 @@ A Flask-based HeartFlow experience with advanced quantum-inspired scoring, long-
 pip install -r requirements.txt
 ```
 
-Set env variables:
+## Environment variables
 
-- `TWITTER_BEARER_TOKEN` (optional but recommended for live tweet fetch)
+- `OPENAI_API_KEY` (required for full LLM scoring/synthesis)
+- `HF_OPENAI_MODEL` (default: `gpt-4o-mini`)
+- `HF_OPENAI_BASE_URL` (default: OpenAI API URL)
+- `TWITTER_BEARER_TOKEN` (recommended for live tweets/trends)
+- `HF_MAX_TWEETS` (default: `32`)
+- `HF_SIMILARITY_THRESHOLD` (default: `0.80`)
+- `HF_REQUEST_TIMEOUT` (default: `25`)
 - `FLASK_SECRET_KEY` (recommended in production)
 - `SESSION_COOKIE_SECURE=1` (recommended behind HTTPS)
 
@@ -32,9 +49,9 @@ Set env variables:
 python main.py
 ```
 
-Then open: `http://localhost:5000`
+Open `http://localhost:5000`.
 
 ## Quick checks
 
-- `GET /healthz` returns `{"ok": true}`.
-- POSTing to `/analyze` without valid CSRF token returns HTTP 400.
+- `GET /healthz` returns `{"ok": true}`
+- `/analyze`, `/score_batch`, `/refresh_trends`, `/score_trends`, `/clear_nodes` require valid CSRF token
