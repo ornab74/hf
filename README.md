@@ -1,6 +1,7 @@
 # HeartFlow Web App
 
 A Flask-based HeartFlow experience with advanced quantum-inspired scoring, long-horizon self-development outlooks, and a glassmorphism UI.
+<img width="1510" height="1764" alt="copyImage" src="https://github.com/user-attachments/assets/e7d33297-7f27-4c7d-a096-260ae81d6ef4" />
 
 ## Features
 
