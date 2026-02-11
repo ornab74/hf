@@ -1073,9 +1073,15 @@ class TimelineApp(App):
         yield Footer()
 
     async def on_mount(self) -> None:
-        self.access_token = await get_access_token()
-        await self.fetch_feed(auto_carousel=True)
-        await self.fetch_trends()
+        try:
+            self.access_token = await get_access_token()
+        except Exception as exc:
+            self.set_status(f"Auth error: {exc}")
+            self.access_token = TWITTER_BEARER_TOKEN
+
+        self.set_status("Loading feed and trends…")
+        asyncio.create_task(self.fetch_feed(auto_carousel=False))
+        asyncio.create_task(self.fetch_trends())
 
     async def fetch_feed(self, pagination_token: Optional[str] = None, auto_carousel: bool = False) -> None:
         if self.is_loading:
@@ -1179,6 +1185,8 @@ class TimelineApp(App):
                 if auto_carousel and self.ranked_posts:
                     self.start_carousel()
 
+                self.set_status(f"Feed loaded: {len(self.ranked_posts)} ranked posts")
+
         except httpx.HTTPStatusError as exc:
             error_msg = f"API error: {exc.response.status_code} - {exc.response.text}"
             posts_list.append(ListItem(Label(f"[red]{error_msg}[/red]")))
@@ -1251,6 +1259,8 @@ class TimelineApp(App):
                     trend_item.styles.background = f"rgb{get_rgb_from_coolness(coolness)}"
                     self.ranked_trends.append(trend_item)
                     trends_list.append(trend_item)
+
+                self.set_status(f"Trends loaded: {len(self.ranked_trends)} ranked trends")
 
         except httpx.HTTPStatusError as exc:
             error_msg = f"Trends API error: {exc.response.status_code} - {exc.response.text}"
