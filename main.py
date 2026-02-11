@@ -9,6 +9,7 @@ import re
 import json
 import math
 import time
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -19,7 +20,7 @@ import pennylane as qml
 from pennylane import numpy as np
 from pennylane import numpy as pnp
 from textual.app import App, ComposeResult
-from textual.containers import Container, VerticalScroll, Vertical
+from textual.containers import Container, VerticalScroll, Vertical, Horizontal
 from textual.widgets import Button, Footer, Header, Label, LoadingIndicator, Static, ListView, ListItem, Input, TabbedContent, TabPane
 from textual.timer import Timer
 
@@ -456,22 +457,117 @@ class HeartFlowEngine:
         self.client = openai.AsyncOpenAI(api_key=api_key)
         self.model = model
     async def _json_chat(self, system: str, payload: Dict[str, Any], max_tokens: int) -> Dict[str, Any]:
-        r = await self.client.chat.completions.create(
-            model=self.model,
-            messages=[
+        user_payload = json.dumps(payload, ensure_ascii=False)
+
+        try:
+            resp = await self.client.responses.create(
+                model=self.model,
+                input=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_payload},
+                ],
+                max_output_tokens=max_tokens,
+                text={"format": {"type": "json_object"}},
+            )
+            content = getattr(resp, "output_text", None)
+            if not content:
+                content = "{}"
+            return json.loads(content)
+        except Exception:
+            pass
+
+        kwargs = {
+            "model": self.model,
+            "messages": [
                 {"role": "system", "content": system},
-                {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+                {"role": "user", "content": user_payload},
             ],
-            response_format={"type": "json_object"},
-            max_tokens=max_tokens,
-        )
-        return json.loads(r.choices[0].message.content)
+            "max_tokens": max_tokens,
+        }
+        try:
+            r = await self.client.chat.completions.create(
+                response_format={"type": "json_object"},
+                **kwargs,
+            )
+        except openai.BadRequestError as exc:
+            msg = str(exc)
+            if "Unsupported parameter: 'response_format'" not in msg:
+                raise
+            r = await self.client.chat.completions.create(**kwargs)
+        content = r.choices[0].message.content or "{}"
+        return json.loads(content)
+
     @staticmethod
     def compute_hf_score(vec: HFVector, coupling_hint: float = 0.0) -> float:
         local = float(np.sum(vec.as_array()))
         lam = 0.78 + float((vec.CAP + vec.CF) / 4.0) + coupling_hint
         lam = clamp(lam, 0.65, 0.95)
         return round(local * lam, 2)
+
+    @staticmethod
+    def ceb_coupling_hint(ent_bits: float, mutual_bits: float) -> float:
+        ent_norm = clamp(float(ent_bits) / 3.0, 0.0, 1.0)
+        mutual_norm = clamp(float(mutual_bits) / 3.0, 0.0, 1.0)
+        coherence = 0.55 * ent_norm + 0.45 * mutual_norm
+        return float((coherence - 0.5) * 0.08)
+
+    @staticmethod
+    def calibrate_by_ceb(confidence: float, risk: float, ent_bits: float, mutual_bits: float) -> Tuple[float, float]:
+        ent_norm = clamp(float(ent_bits) / 3.0, 0.0, 1.0)
+        mutual_norm = clamp(float(mutual_bits) / 3.0, 0.0, 1.0)
+        stability = 0.60 * ent_norm + 0.40 * mutual_norm
+        conf_adj = (stability - 0.5) * 0.18
+        risk_adj = (0.45 - stability) * 0.12
+        new_conf = clamp(float(confidence) + conf_adj, 0.0, 1.0)
+        new_risk = clamp(float(risk) + risk_adj, 0.0, 1.0)
+        return float(new_conf), float(new_risk)
+
+    @staticmethod
+    def ceb_advanced_profile(
+        vec: HFVector,
+        qcm: Dict[str, Any],
+        confidence: float,
+        risk: float,
+        prior_vec: Optional[HFVector] = None,
+    ) -> Tuple[float, float, float, List[str]]:
+        ent_bits = float(qcm.get("ent_bits", 0.0))
+        mutual_bits = float(qcm.get("mutual_bits", 0.0))
+        s_axes = float(qcm.get("S_axes", 0.0))
+        kicks_used = int(qcm.get("kicks_used", 0))
+
+        ent_norm = clamp(ent_bits / 3.0, 0.0, 1.0)
+        mutual_norm = clamp(mutual_bits / 3.0, 0.0, 1.0)
+        axes_norm = clamp(s_axes / 6.0, 0.0, 1.0)
+        kick_density = clamp(kicks_used / max(1.0, float(HF_HISTORY_LIMIT)), 0.0, 1.0)
+
+        axis_std = float(np.std(vec.as_array()))
+        axis_balance = clamp(1.0 - (axis_std / 0.35), 0.0, 1.0)
+        coherence = clamp(
+            0.36 * ent_norm + 0.32 * mutual_norm + 0.18 * axes_norm + 0.14 * axis_balance,
+            0.0,
+            1.0,
+        )
+
+        drift = 0.0
+        if prior_vec is not None:
+            drift = clamp(float(np.mean(np.abs(vec.as_array() - prior_vec.as_array()))), 0.0, 1.0)
+
+        coupling_hint = (coherence - 0.5) * 0.10 + (axis_balance - 0.5) * 0.04 - drift * 0.03
+        coupling_hint = float(clamp(coupling_hint, -0.12, 0.12))
+
+        conf_adj = (coherence - 0.5) * 0.22 + kick_density * 0.04 - drift * 0.10
+        risk_adj = (0.5 - coherence) * 0.14 + drift * 0.10 + max(0.0, 0.35 - kick_density) * 0.05
+
+        new_conf = float(clamp(float(confidence) + conf_adj, 0.0, 1.0))
+        new_risk = float(clamp(float(risk) + risk_adj, 0.0, 1.0))
+
+        flags = [
+            f"ceb_coherence={coherence:.3f}",
+            f"ceb_kick_density={kick_density:.3f}",
+            f"ceb_drift={drift:.3f}",
+        ]
+        return coupling_hint, new_conf, new_risk, flags
+
     @staticmethod
     def eggshell_guards(new_vec: HFVector, confidence: float, flags: List[str], prior: Optional[HFVector]) -> Tuple[HFVector, float, List[str]]:
         v = new_vec.as_array()
@@ -680,8 +776,8 @@ Output ONLY in JSON: {"analyses": [{id: str, score: int, reason: str}, ...], "ra
 
 async def get_oauth2_tokens() -> Tuple[str, str]:
     """Perform OAuth 2.0 PKCE flow to get access and refresh tokens."""
-    code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('utf-8').rstrip('=')
-    code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode('utf-8')).digest()).decode('utf-8').rstrip('=')
+    code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("utf-8").rstrip("=")
+    code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode("utf-8")).digest()).decode("utf-8").rstrip("=")
     state = secrets.token_hex(16)
 
     auth_params = {
@@ -691,23 +787,27 @@ async def get_oauth2_tokens() -> Tuple[str, str]:
         "scope": "tweet.read users.read offline.access",
         "state": state,
         "code_challenge": code_challenge,
-        "code_challenge_method": "S256"
+        "code_challenge_method": "S256",
     }
     auth_url = "https://twitter.com/i/oauth2/authorize?" + urllib.parse.urlencode(auth_params)
 
     print("Opening browser for authorization...")
     webbrowser.open(auth_url)
 
-    redirect_url = input("After authorizing, copy the full redirect URL from the browser and paste here: ")
+    try:
+        redirect_url = input("After authorizing, copy the full redirect URL from the browser and paste here: ")
+    except EOFError as exc:
+        raise RuntimeError("OAuth input unavailable in non-interactive mode") from exc
+
     parsed_url = urllib.parse.urlparse(redirect_url)
     query_params = urllib.parse.parse_qs(parsed_url.query)
 
-    if 'state' not in query_params or query_params['state'][0] != state:
+    if "state" not in query_params or query_params["state"][0] != state:
         raise ValueError("State mismatch - possible CSRF attack.")
-    if 'code' not in query_params:
+    if "code" not in query_params:
         raise ValueError("No authorization code found.")
 
-    code = query_params['code'][0]
+    code = query_params["code"][0]
 
     async with httpx.AsyncClient() as client:
         token_response = await client.post(
@@ -718,21 +818,21 @@ async def get_oauth2_tokens() -> Tuple[str, str]:
                 "code": code,
                 "redirect_uri": REDIRECT_URI,
                 "code_verifier": code_verifier,
-            }
+            },
         )
         token_response.raise_for_status()
         tokens = token_response.json()
 
     access_token = tokens["access_token"]
-    refresh_token = tokens.get("refresh_token", "")  # If offline.access
+    refresh_token = tokens.get("refresh_token", "")
 
-    # Save to env or file for future
     with open(".env", "a") as f:
         f.write(f"\nTWITTER_ACCESS_TOKEN={access_token}\n")
         if refresh_token:
             f.write(f"TWITTER_REFRESH_TOKEN={refresh_token}\n")
 
     return access_token, refresh_token
+
 
 async def refresh_access_token(refresh_token: str) -> str:
     """Refresh the access token using refresh token."""
@@ -743,37 +843,60 @@ async def refresh_access_token(refresh_token: str) -> str:
             data={
                 "grant_type": "refresh_token",
                 "refresh_token": refresh_token,
-            }
+            },
         )
         response.raise_for_status()
         tokens = response.json()
+
     new_access_token = tokens["access_token"]
     new_refresh_token = tokens.get("refresh_token", refresh_token)
 
-    # Update .env
-    with open(".env", "r") as f:
-        lines = f.readlines()
-    with open(".env", "w") as f:
+    env_path = ".env"
+    lines = []
+    if os.path.exists(env_path):
+        with open(env_path, "r") as f:
+            lines = f.readlines()
+
+    saw_access = False
+    saw_refresh = False
+    with open(env_path, "w") as f:
         for line in lines:
             if line.startswith("TWITTER_ACCESS_TOKEN="):
                 f.write(f"TWITTER_ACCESS_TOKEN={new_access_token}\n")
+                saw_access = True
             elif line.startswith("TWITTER_REFRESH_TOKEN="):
                 f.write(f"TWITTER_REFRESH_TOKEN={new_refresh_token}\n")
+                saw_refresh = True
             else:
                 f.write(line)
+        if not saw_access:
+            f.write(f"TWITTER_ACCESS_TOKEN={new_access_token}\n")
+        if not saw_refresh:
+            f.write(f"TWITTER_REFRESH_TOKEN={new_refresh_token}\n")
 
     return new_access_token
 
+
 async def get_access_token() -> str:
     global TWITTER_ACCESS_TOKEN, TWITTER_REFRESH_TOKEN
-    if not TWITTER_ACCESS_TOKEN:
-        TWITTER_ACCESS_TOKEN, TWITTER_REFRESH_TOKEN = await get_oauth2_tokens()
-    elif TWITTER_REFRESH_TOKEN:
+
+    if TWITTER_ACCESS_TOKEN:
+        return TWITTER_ACCESS_TOKEN
+
+    if TWITTER_REFRESH_TOKEN:
         try:
-            return TWITTER_ACCESS_TOKEN
-        except:
             TWITTER_ACCESS_TOKEN = await refresh_access_token(TWITTER_REFRESH_TOKEN)
-    return TWITTER_ACCESS_TOKEN
+            return TWITTER_ACCESS_TOKEN
+        except Exception as exc:
+            logging.warning("Refresh token flow failed; falling back to OAuth prompt: %s", exc)
+
+    try:
+        TWITTER_ACCESS_TOKEN, TWITTER_REFRESH_TOKEN = await get_oauth2_tokens()
+        return TWITTER_ACCESS_TOKEN
+    except Exception as exc:
+        logging.warning("OAuth flow unavailable; falling back to bearer token: %s", exc)
+        return TWITTER_BEARER_TOKEN
+
 
 class PostItem(ListItem):
     """A list item for a post."""
@@ -845,9 +968,8 @@ class TimelineApp(App):
         dock: bottom;
     }
     Label#text {
-        text-style: wrap;
         width: 100%;
-        content-align: left;
+        content-align: left top;
     }
     ListItem {
         background: $panel;
@@ -951,9 +1073,15 @@ class TimelineApp(App):
         yield Footer()
 
     async def on_mount(self) -> None:
-        self.access_token = await get_access_token()
-        await self.fetch_feed(auto_carousel=True)
-        await self.fetch_trends()
+        try:
+            self.access_token = await get_access_token()
+        except Exception as exc:
+            self.set_status(f"Auth error: {exc}")
+            self.access_token = TWITTER_BEARER_TOKEN
+
+        self.set_status("Loading feed and trends…")
+        asyncio.create_task(self.fetch_feed(auto_carousel=False))
+        asyncio.create_task(self.fetch_trends())
 
     async def fetch_feed(self, pagination_token: Optional[str] = None, auto_carousel: bool = False) -> None:
         if self.is_loading:
@@ -1057,6 +1185,8 @@ class TimelineApp(App):
                 if auto_carousel and self.ranked_posts:
                     self.start_carousel()
 
+                self.set_status(f"Feed loaded: {len(self.ranked_posts)} ranked posts")
+
         except httpx.HTTPStatusError as exc:
             error_msg = f"API error: {exc.response.status_code} - {exc.response.text}"
             posts_list.append(ListItem(Label(f"[red]{error_msg}[/red]")))
@@ -1130,6 +1260,8 @@ class TimelineApp(App):
                     self.ranked_trends.append(trend_item)
                     trends_list.append(trend_item)
 
+                self.set_status(f"Trends loaded: {len(self.ranked_trends)} ranked trends")
+
         except httpx.HTTPStatusError as exc:
             error_msg = f"Trends API error: {exc.response.status_code} - {exc.response.text}"
             trends_list.append(ListItem(Label(f"[red]{error_msg}[/red]")))
@@ -1179,11 +1311,7 @@ class TimelineApp(App):
             asyncio.create_task(self.shutdown())
             return
         if bid == "clear_nodes":
-            async with self._lock:
-                self.nodes.clear()
-            self.query_one("#hf_nodes_list", ListView).clear()
-            self.set_status("Cleared nodes.")
-            asyncio.create_task(self.refresh_hf_panels())
+            asyncio.create_task(self.clear_nodes())
             return
         if bid == "refresh":
             self.query_one("#posts").clear()
@@ -1225,6 +1353,13 @@ class TimelineApp(App):
                 return
             asyncio.create_task(self.score_trends())
             return
+
+    async def clear_nodes(self) -> None:
+        async with self._lock:
+            self.nodes.clear()
+        self.query_one("#hf_nodes_list", ListView).clear()
+        self.set_status("Cleared nodes.")
+        await self.refresh_hf_panels()
 
     async def batch_score(self, raw: str) -> None:
         users = self.parse_batch_input(raw)
@@ -1299,12 +1434,17 @@ class TimelineApp(App):
         prior = self.nodes.get(name)
         prior_vec = prior.vec if prior else None
         vec, conf, risk, flags, reasoning = await self.hf.score_from_posts(tweets, "trend", prior_vec)
-        score = self.hf.compute_hf_score(vec)
         post_texts = [t.get("text", "") for t in tweets]
         qcm = quantum_color_metrics(vec.as_dict(), post_texts)
         rgb = qcm["rgb"]
         ent_bits = qcm["ent_bits"]
         mutual_bits = qcm["mutual_bits"]
+        baseline_hint = self.hf.ceb_coupling_hint(ent_bits, mutual_bits)
+        conf, risk = self.hf.calibrate_by_ceb(conf, risk, ent_bits, mutual_bits)
+        advanced_hint, conf, risk, ceb_flags = self.hf.ceb_advanced_profile(vec, qcm, conf, risk, prior_vec)
+        coupling_hint = float(clamp(baseline_hint + advanced_hint, -0.14, 0.14))
+        score = self.hf.compute_hf_score(vec, coupling_hint=coupling_hint)
+        flags = dedupe(flags + [f"ceb_hint={coupling_hint:+.3f}", f"ceb_base_hint={baseline_hint:+.3f}"] + ceb_flags)
         hp = HFHistoryPoint(
             ts=now_utc(),
             score=score,
@@ -1369,12 +1509,17 @@ class TimelineApp(App):
         uid = await self.x.user_id_from_username(username)
         tweets = await self.x.fetch_recent_tweets(uid, HF_MAX_TWEETS)
         vec, conf, risk, flags, reasoning = await self.hf.score_from_posts(tweets, node_type, prior_vec)
-        score = self.hf.compute_hf_score(vec)
         post_texts = [t.get("text", "") for t in tweets]
         qcm = quantum_color_metrics(vec.as_dict(), post_texts)
         rgb = qcm["rgb"]
         ent_bits = qcm["ent_bits"]
         mutual_bits = qcm["mutual_bits"]
+        baseline_hint = self.hf.ceb_coupling_hint(ent_bits, mutual_bits)
+        conf, risk = self.hf.calibrate_by_ceb(conf, risk, ent_bits, mutual_bits)
+        advanced_hint, conf, risk, ceb_flags = self.hf.ceb_advanced_profile(vec, qcm, conf, risk, prior_vec)
+        coupling_hint = float(clamp(baseline_hint + advanced_hint, -0.14, 0.14))
+        score = self.hf.compute_hf_score(vec, coupling_hint=coupling_hint)
+        flags = dedupe(flags + [f"ceb_hint={coupling_hint:+.3f}", f"ceb_base_hint={baseline_hint:+.3f}"] + ceb_flags)
         hp = HFHistoryPoint(
             ts=now_utc(),
             score=score,
