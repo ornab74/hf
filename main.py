@@ -9,6 +9,7 @@ import re
 import json
 import math
 import time
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -1179,11 +1180,7 @@ class TimelineApp(App):
             asyncio.create_task(self.shutdown())
             return
         if bid == "clear_nodes":
-            async with self._lock:
-                self.nodes.clear()
-            self.query_one("#hf_nodes_list", ListView).clear()
-            self.set_status("Cleared nodes.")
-            asyncio.create_task(self.refresh_hf_panels())
+            asyncio.create_task(self.clear_nodes())
             return
         if bid == "refresh":
             self.query_one("#posts").clear()
@@ -1225,6 +1222,13 @@ class TimelineApp(App):
                 return
             asyncio.create_task(self.score_trends())
             return
+
+    async def clear_nodes(self) -> None:
+        async with self._lock:
+            self.nodes.clear()
+        self.query_one("#hf_nodes_list", ListView).clear()
+        self.set_status("Cleared nodes.")
+        await self.refresh_hf_panels()
 
     async def batch_score(self, raw: str) -> None:
         users = self.parse_batch_input(raw)
