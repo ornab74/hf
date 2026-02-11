@@ -1,4 +1,9 @@
 flask==3.0.3
 httpx==0.27.2
+httpx==0.27.2
+openai==2.20.0
+pennylane==0.38.0
+autoray==0.6.12
+textual==0.79.1
 python-dotenv==1.0.1
 gunicorn==25.0.3
