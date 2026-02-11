@@ -52,6 +52,7 @@ def set_security_headers(resp):
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    resp.headers["Content-Security-Policy"] = "default-src 'self'; style-src 'self' https://cdn.jsdelivr.net; script-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:; font-src 'self' https://cdn.jsdelivr.net; connect-src 'self'; frame-ancestors 'none'"
     return resp
 
 
@@ -104,6 +105,60 @@ async def fetch_recent_texts(handle: str, limit: int = 20) -> List[str]:
         rows = tweets_resp.json().get("data", [])
         return [r.get("text", "") for r in rows if r.get("text")]
 
+
+
+
+def sanitize_display_text(value: str, max_len: int = 280) -> str:
+    raw = str(value or "")
+    cleaned = "".join(ch for ch in raw if ch == "\n" or 32 <= ord(ch) <= 126)
+    cleaned = cleaned.replace("<", "").replace(">", "").replace("`", "")
+    cleaned = cleaned.replace("javascript:", "")
+    cleaned = cleaned.strip()[:max_len]
+    return cleaned
+
+
+def sanitize_result_payload(result: Dict[str, Any]) -> Dict[str, Any]:
+    safe = dict(result)
+    safe["handle"] = sanitize_display_text(result.get("handle", ""), 15)
+    safe["vibe"] = sanitize_display_text(result.get("vibe", ""), 30)
+    safe["signature"] = sanitize_display_text(result.get("signature", ""), 32)
+
+    safe_quantum = dict(result.get("quantum", {}))
+    safe_modes = []
+    for mode in safe_quantum.get("dominant_modes", [])[:6]:
+        safe_modes.append({
+            "axis": sanitize_display_text(mode.get("axis", ""), 16),
+            "weight": float(mode.get("weight", 0.0)),
+        })
+    safe_quantum["dominant_modes"] = safe_modes
+    safe["quantum"] = safe_quantum
+
+    safe_outlooks = []
+    for o in result.get("outlooks", [])[:3]:
+        safe_outlooks.append({
+            "horizon": sanitize_display_text(o.get("horizon", ""), 24),
+            "title": sanitize_display_text(o.get("title", ""), 64),
+            "focus": sanitize_display_text(o.get("focus", ""), 280),
+            "actions": [sanitize_display_text(a, 220) for a in o.get("actions", [])[:5]],
+            "milestone": sanitize_display_text(o.get("milestone", ""), 220),
+        })
+    safe["outlooks"] = safe_outlooks
+
+    safe_trips = []
+    for t in result.get("human_trips", [])[:4]:
+        safe_trips.append({
+            "name": sanitize_display_text(t.get("name", ""), 80),
+            "why": sanitize_display_text(t.get("why", ""), 220),
+            "challenge": sanitize_display_text(t.get("challenge", ""), 220),
+        })
+    safe["human_trips"] = safe_trips
+
+    safe_axes = {}
+    for k, v in result.get("axes", {}).items():
+        kk = sanitize_display_text(k, 20)
+        safe_axes[kk] = max(0.0, min(1.0, float(v)))
+    safe["axes"] = safe_axes
+    return safe
 
 def _term_ratio(text_blob: str, terms: List[str]) -> float:
     text = text_blob.lower()
@@ -303,7 +358,7 @@ def analyze():
     except Exception:
         texts = []
 
-    result = score_heartflow(handle, texts)
+    result = sanitize_result_payload(score_heartflow(handle, texts))
 
     return render_template(
         "index.html",
