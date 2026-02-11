@@ -55,3 +55,11 @@ Open `http://localhost:5000`.
 
 - `GET /healthz` returns `{"ok": true}`
 - `/analyze`, `/score_batch`, `/refresh_trends`, `/score_trends`, `/clear_nodes` require valid CSRF token
+
+## Production (Gunicorn)
+
+```bash
+gunicorn main:app -b 0.0.0.0:3000 -w 4 -k gthread --threads 4 --timeout 180 --graceful-timeout 30 --log-level info
+```
+
+This matches the container production entrypoint and is recommended over Flask's dev server for deployment.
