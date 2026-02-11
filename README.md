@@ -1,6 +1,7 @@
 # HeartFlow Web Console
 
-A Flask HeartFlow app that brings key TUI features into a browser dashboard (except post carousel).
+A Flask HeartFlow app that brings Quantum Surfaces into a browser dashboard (except post carousel).
+<img width="1280" height="2106" alt="copyImage" src="https://github.com/user-attachments/assets/90e87262-e381-4cc1-867c-ea5c7712c96e" />
 
 ## What’s in the web UI now
 
