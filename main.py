@@ -503,6 +503,71 @@ class HeartFlowEngine:
         lam = 0.78 + float((vec.CAP + vec.CF) / 4.0) + coupling_hint
         lam = clamp(lam, 0.65, 0.95)
         return round(local * lam, 2)
+
+    @staticmethod
+    def ceb_coupling_hint(ent_bits: float, mutual_bits: float) -> float:
+        ent_norm = clamp(float(ent_bits) / 3.0, 0.0, 1.0)
+        mutual_norm = clamp(float(mutual_bits) / 3.0, 0.0, 1.0)
+        coherence = 0.55 * ent_norm + 0.45 * mutual_norm
+        return float((coherence - 0.5) * 0.08)
+
+    @staticmethod
+    def calibrate_by_ceb(confidence: float, risk: float, ent_bits: float, mutual_bits: float) -> Tuple[float, float]:
+        ent_norm = clamp(float(ent_bits) / 3.0, 0.0, 1.0)
+        mutual_norm = clamp(float(mutual_bits) / 3.0, 0.0, 1.0)
+        stability = 0.60 * ent_norm + 0.40 * mutual_norm
+        conf_adj = (stability - 0.5) * 0.18
+        risk_adj = (0.45 - stability) * 0.12
+        new_conf = clamp(float(confidence) + conf_adj, 0.0, 1.0)
+        new_risk = clamp(float(risk) + risk_adj, 0.0, 1.0)
+        return float(new_conf), float(new_risk)
+
+    @staticmethod
+    def ceb_advanced_profile(
+        vec: HFVector,
+        qcm: Dict[str, Any],
+        confidence: float,
+        risk: float,
+        prior_vec: Optional[HFVector] = None,
+    ) -> Tuple[float, float, float, List[str]]:
+        ent_bits = float(qcm.get("ent_bits", 0.0))
+        mutual_bits = float(qcm.get("mutual_bits", 0.0))
+        s_axes = float(qcm.get("S_axes", 0.0))
+        kicks_used = int(qcm.get("kicks_used", 0))
+
+        ent_norm = clamp(ent_bits / 3.0, 0.0, 1.0)
+        mutual_norm = clamp(mutual_bits / 3.0, 0.0, 1.0)
+        axes_norm = clamp(s_axes / 6.0, 0.0, 1.0)
+        kick_density = clamp(kicks_used / max(1.0, float(HF_HISTORY_LIMIT)), 0.0, 1.0)
+
+        axis_std = float(np.std(vec.as_array()))
+        axis_balance = clamp(1.0 - (axis_std / 0.35), 0.0, 1.0)
+        coherence = clamp(
+            0.36 * ent_norm + 0.32 * mutual_norm + 0.18 * axes_norm + 0.14 * axis_balance,
+            0.0,
+            1.0,
+        )
+
+        drift = 0.0
+        if prior_vec is not None:
+            drift = clamp(float(np.mean(np.abs(vec.as_array() - prior_vec.as_array()))), 0.0, 1.0)
+
+        coupling_hint = (coherence - 0.5) * 0.10 + (axis_balance - 0.5) * 0.04 - drift * 0.03
+        coupling_hint = float(clamp(coupling_hint, -0.12, 0.12))
+
+        conf_adj = (coherence - 0.5) * 0.22 + kick_density * 0.04 - drift * 0.10
+        risk_adj = (0.5 - coherence) * 0.14 + drift * 0.10 + max(0.0, 0.35 - kick_density) * 0.05
+
+        new_conf = float(clamp(float(confidence) + conf_adj, 0.0, 1.0))
+        new_risk = float(clamp(float(risk) + risk_adj, 0.0, 1.0))
+
+        flags = [
+            f"ceb_coherence={coherence:.3f}",
+            f"ceb_kick_density={kick_density:.3f}",
+            f"ceb_drift={drift:.3f}",
+        ]
+        return coupling_hint, new_conf, new_risk, flags
+
     @staticmethod
     def eggshell_guards(new_vec: HFVector, confidence: float, flags: List[str], prior: Optional[HFVector]) -> Tuple[HFVector, float, List[str]]:
         v = new_vec.as_array()
@@ -1359,12 +1424,17 @@ class TimelineApp(App):
         prior = self.nodes.get(name)
         prior_vec = prior.vec if prior else None
         vec, conf, risk, flags, reasoning = await self.hf.score_from_posts(tweets, "trend", prior_vec)
-        score = self.hf.compute_hf_score(vec)
         post_texts = [t.get("text", "") for t in tweets]
         qcm = quantum_color_metrics(vec.as_dict(), post_texts)
         rgb = qcm["rgb"]
         ent_bits = qcm["ent_bits"]
         mutual_bits = qcm["mutual_bits"]
+        baseline_hint = self.hf.ceb_coupling_hint(ent_bits, mutual_bits)
+        conf, risk = self.hf.calibrate_by_ceb(conf, risk, ent_bits, mutual_bits)
+        advanced_hint, conf, risk, ceb_flags = self.hf.ceb_advanced_profile(vec, qcm, conf, risk, prior_vec)
+        coupling_hint = float(clamp(baseline_hint + advanced_hint, -0.14, 0.14))
+        score = self.hf.compute_hf_score(vec, coupling_hint=coupling_hint)
+        flags = dedupe(flags + [f"ceb_hint={coupling_hint:+.3f}", f"ceb_base_hint={baseline_hint:+.3f}"] + ceb_flags)
         hp = HFHistoryPoint(
             ts=now_utc(),
             score=score,
@@ -1429,12 +1499,17 @@ class TimelineApp(App):
         uid = await self.x.user_id_from_username(username)
         tweets = await self.x.fetch_recent_tweets(uid, HF_MAX_TWEETS)
         vec, conf, risk, flags, reasoning = await self.hf.score_from_posts(tweets, node_type, prior_vec)
-        score = self.hf.compute_hf_score(vec)
         post_texts = [t.get("text", "") for t in tweets]
         qcm = quantum_color_metrics(vec.as_dict(), post_texts)
         rgb = qcm["rgb"]
         ent_bits = qcm["ent_bits"]
         mutual_bits = qcm["mutual_bits"]
+        baseline_hint = self.hf.ceb_coupling_hint(ent_bits, mutual_bits)
+        conf, risk = self.hf.calibrate_by_ceb(conf, risk, ent_bits, mutual_bits)
+        advanced_hint, conf, risk, ceb_flags = self.hf.ceb_advanced_profile(vec, qcm, conf, risk, prior_vec)
+        coupling_hint = float(clamp(baseline_hint + advanced_hint, -0.14, 0.14))
+        score = self.hf.compute_hf_score(vec, coupling_hint=coupling_hint)
+        flags = dedupe(flags + [f"ceb_hint={coupling_hint:+.3f}", f"ceb_base_hint={baseline_hint:+.3f}"] + ceb_flags)
         hp = HFHistoryPoint(
             ts=now_utc(),
             score=score,
