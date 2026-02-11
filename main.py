@@ -9,6 +9,7 @@ import re
 import json
 import math
 import time
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -19,7 +20,7 @@ import pennylane as qml
 from pennylane import numpy as np
 from pennylane import numpy as pnp
 from textual.app import App, ComposeResult
-from textual.containers import Container, VerticalScroll, Vertical
+from textual.containers import Container, VerticalScroll, Vertical, Horizontal
 from textual.widgets import Button, Footer, Header, Label, LoadingIndicator, Static, ListView, ListItem, Input, TabbedContent, TabPane
 from textual.timer import Timer
 
@@ -456,16 +457,46 @@ class HeartFlowEngine:
         self.client = openai.AsyncOpenAI(api_key=api_key)
         self.model = model
     async def _json_chat(self, system: str, payload: Dict[str, Any], max_tokens: int) -> Dict[str, Any]:
-        r = await self.client.chat.completions.create(
-            model=self.model,
-            messages=[
+        user_payload = json.dumps(payload, ensure_ascii=False)
+
+        try:
+            resp = await self.client.responses.create(
+                model=self.model,
+                input=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_payload},
+                ],
+                max_output_tokens=max_tokens,
+                text={"format": {"type": "json_object"}},
+            )
+            content = getattr(resp, "output_text", None)
+            if not content:
+                content = "{}"
+            return json.loads(content)
+        except Exception:
+            pass
+
+        kwargs = {
+            "model": self.model,
+            "messages": [
                 {"role": "system", "content": system},
-                {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+                {"role": "user", "content": user_payload},
             ],
-            response_format={"type": "json_object"},
-            max_tokens=max_tokens,
-        )
-        return json.loads(r.choices[0].message.content)
+            "max_tokens": max_tokens,
+        }
+        try:
+            r = await self.client.chat.completions.create(
+                response_format={"type": "json_object"},
+                **kwargs,
+            )
+        except openai.BadRequestError as exc:
+            msg = str(exc)
+            if "Unsupported parameter: 'response_format'" not in msg:
+                raise
+            r = await self.client.chat.completions.create(**kwargs)
+        content = r.choices[0].message.content or "{}"
+        return json.loads(content)
+
     @staticmethod
     def compute_hf_score(vec: HFVector, coupling_hint: float = 0.0) -> float:
         local = float(np.sum(vec.as_array()))
@@ -680,8 +711,8 @@ Output ONLY in JSON: {"analyses": [{id: str, score: int, reason: str}, ...], "ra
 
 async def get_oauth2_tokens() -> Tuple[str, str]:
     """Perform OAuth 2.0 PKCE flow to get access and refresh tokens."""
-    code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('utf-8').rstrip('=')
-    code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode('utf-8')).digest()).decode('utf-8').rstrip('=')
+    code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("utf-8").rstrip("=")
+    code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode("utf-8")).digest()).decode("utf-8").rstrip("=")
     state = secrets.token_hex(16)
 
     auth_params = {
@@ -691,23 +722,27 @@ async def get_oauth2_tokens() -> Tuple[str, str]:
         "scope": "tweet.read users.read offline.access",
         "state": state,
         "code_challenge": code_challenge,
-        "code_challenge_method": "S256"
+        "code_challenge_method": "S256",
     }
     auth_url = "https://twitter.com/i/oauth2/authorize?" + urllib.parse.urlencode(auth_params)
 
     print("Opening browser for authorization...")
     webbrowser.open(auth_url)
 
-    redirect_url = input("After authorizing, copy the full redirect URL from the browser and paste here: ")
+    try:
+        redirect_url = input("After authorizing, copy the full redirect URL from the browser and paste here: ")
+    except EOFError as exc:
+        raise RuntimeError("OAuth input unavailable in non-interactive mode") from exc
+
     parsed_url = urllib.parse.urlparse(redirect_url)
     query_params = urllib.parse.parse_qs(parsed_url.query)
 
-    if 'state' not in query_params or query_params['state'][0] != state:
+    if "state" not in query_params or query_params["state"][0] != state:
         raise ValueError("State mismatch - possible CSRF attack.")
-    if 'code' not in query_params:
+    if "code" not in query_params:
         raise ValueError("No authorization code found.")
 
-    code = query_params['code'][0]
+    code = query_params["code"][0]
 
     async with httpx.AsyncClient() as client:
         token_response = await client.post(
@@ -718,21 +753,21 @@ async def get_oauth2_tokens() -> Tuple[str, str]:
                 "code": code,
                 "redirect_uri": REDIRECT_URI,
                 "code_verifier": code_verifier,
-            }
+            },
         )
         token_response.raise_for_status()
         tokens = token_response.json()
 
     access_token = tokens["access_token"]
-    refresh_token = tokens.get("refresh_token", "")  # If offline.access
+    refresh_token = tokens.get("refresh_token", "")
 
-    # Save to env or file for future
     with open(".env", "a") as f:
         f.write(f"\nTWITTER_ACCESS_TOKEN={access_token}\n")
         if refresh_token:
             f.write(f"TWITTER_REFRESH_TOKEN={refresh_token}\n")
 
     return access_token, refresh_token
+
 
 async def refresh_access_token(refresh_token: str) -> str:
     """Refresh the access token using refresh token."""
@@ -743,37 +778,60 @@ async def refresh_access_token(refresh_token: str) -> str:
             data={
                 "grant_type": "refresh_token",
                 "refresh_token": refresh_token,
-            }
+            },
         )
         response.raise_for_status()
         tokens = response.json()
+
     new_access_token = tokens["access_token"]
     new_refresh_token = tokens.get("refresh_token", refresh_token)
 
-    # Update .env
-    with open(".env", "r") as f:
-        lines = f.readlines()
-    with open(".env", "w") as f:
+    env_path = ".env"
+    lines = []
+    if os.path.exists(env_path):
+        with open(env_path, "r") as f:
+            lines = f.readlines()
+
+    saw_access = False
+    saw_refresh = False
+    with open(env_path, "w") as f:
         for line in lines:
             if line.startswith("TWITTER_ACCESS_TOKEN="):
                 f.write(f"TWITTER_ACCESS_TOKEN={new_access_token}\n")
+                saw_access = True
             elif line.startswith("TWITTER_REFRESH_TOKEN="):
                 f.write(f"TWITTER_REFRESH_TOKEN={new_refresh_token}\n")
+                saw_refresh = True
             else:
                 f.write(line)
+        if not saw_access:
+            f.write(f"TWITTER_ACCESS_TOKEN={new_access_token}\n")
+        if not saw_refresh:
+            f.write(f"TWITTER_REFRESH_TOKEN={new_refresh_token}\n")
 
     return new_access_token
 
+
 async def get_access_token() -> str:
     global TWITTER_ACCESS_TOKEN, TWITTER_REFRESH_TOKEN
-    if not TWITTER_ACCESS_TOKEN:
-        TWITTER_ACCESS_TOKEN, TWITTER_REFRESH_TOKEN = await get_oauth2_tokens()
-    elif TWITTER_REFRESH_TOKEN:
+
+    if TWITTER_ACCESS_TOKEN:
+        return TWITTER_ACCESS_TOKEN
+
+    if TWITTER_REFRESH_TOKEN:
         try:
-            return TWITTER_ACCESS_TOKEN
-        except:
             TWITTER_ACCESS_TOKEN = await refresh_access_token(TWITTER_REFRESH_TOKEN)
-    return TWITTER_ACCESS_TOKEN
+            return TWITTER_ACCESS_TOKEN
+        except Exception as exc:
+            logging.warning("Refresh token flow failed; falling back to OAuth prompt: %s", exc)
+
+    try:
+        TWITTER_ACCESS_TOKEN, TWITTER_REFRESH_TOKEN = await get_oauth2_tokens()
+        return TWITTER_ACCESS_TOKEN
+    except Exception as exc:
+        logging.warning("OAuth flow unavailable; falling back to bearer token: %s", exc)
+        return TWITTER_BEARER_TOKEN
+
 
 class PostItem(ListItem):
     """A list item for a post."""
@@ -845,9 +903,8 @@ class TimelineApp(App):
         dock: bottom;
     }
     Label#text {
-        text-style: wrap;
         width: 100%;
-        content-align: left;
+        content-align: left top;
     }
     ListItem {
         background: $panel;
@@ -1179,11 +1236,7 @@ class TimelineApp(App):
             asyncio.create_task(self.shutdown())
             return
         if bid == "clear_nodes":
-            async with self._lock:
-                self.nodes.clear()
-            self.query_one("#hf_nodes_list", ListView).clear()
-            self.set_status("Cleared nodes.")
-            asyncio.create_task(self.refresh_hf_panels())
+            asyncio.create_task(self.clear_nodes())
             return
         if bid == "refresh":
             self.query_one("#posts").clear()
@@ -1225,6 +1278,13 @@ class TimelineApp(App):
                 return
             asyncio.create_task(self.score_trends())
             return
+
+    async def clear_nodes(self) -> None:
+        async with self._lock:
+            self.nodes.clear()
+        self.query_one("#hf_nodes_list", ListView).clear()
+        self.set_status("Cleared nodes.")
+        await self.refresh_hf_panels()
 
     async def batch_score(self, raw: str) -> None:
         users = self.parse_batch_input(raw)
