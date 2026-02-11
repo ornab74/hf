@@ -3,86 +3,171 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Find your Heartflow</title>
+  <title>HeartFlow Web Console</title>
   <link rel="stylesheet" href="{{ bootstrap_css.href }}" integrity="{{ bootstrap_css.integrity }}" crossorigin="anonymous">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <main class="hf-shell">
-    <section class="glass-card" style="{% if result %}background-image: {{ result.glass }};{% endif %}">
-      <h1 class="title">Find your Heartflow</h1>
-      <p class="subtitle">Advanced quantum-inspired scoring + better-human long-range pathway.</p>
+<main class="hf-shell">
+  <section class="glass-card" {% if result %}style="background-image: {{ result.glass }};"{% endif %}>
+    <h1 class="title">HeartFlow Web Console</h1>
+    <p class="subtitle">TUI features moved into the web UI (except carousel).</p>
 
-      <form method="post" action="{{ url_for('analyze') }}" class="hf-form">
+    <form method="post" action="{{ url_for('analyze') }}" class="hf-form mb-2">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <div class="input-wrap">
+        <span class="at">@</span>
+        <input name="handle" id="handle" placeholder="username" maxlength="15" required>
+      </div>
+      <button class="btn btn-primary" type="submit">Analyze Handle</button>
+    </form>
+
+    <div class="mini-actions">
+      <form method="post" action="{{ url_for('refresh_trends_route') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-        <div class="input-wrap">
-          <span class="at">@</span>
-          <input name="handle" id="handle" placeholder="elonmusk" maxlength="15" required>
-        </div>
-        <button class="btn btn-primary px-4 py-2" type="submit">Analyze</button>
+        <button class="btn btn-outline-light btn-sm" type="submit">Refresh Trends</button>
       </form>
+      <form method="post" action="{{ url_for('score_trends_route') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <button class="btn btn-outline-info btn-sm" type="submit">Score Trends</button>
+      </form>
+      <form method="post" action="{{ url_for('clear_nodes_route') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <button class="btn btn-outline-warning btn-sm" type="submit">Clear Nodes</button>
+      </form>
+    </div>
 
-      {% if error %}
-      <div class="alert alert-danger mt-3" role="alert">{{ error }}</div>
-      {% endif %}
+    <form method="post" action="{{ url_for('score_batch_route') }}" class="mt-2">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <textarea class="form-control" rows="2" name="batch_input" placeholder="Batch: alice,bob OR @foo:dao OR trend_name:trend"></textarea>
+      <button class="btn btn-secondary btn-sm mt-2" type="submit">Score Batch</button>
+    </form>
 
-      {% if result %}
-      <section class="result mt-4">
-        <div class="headline">
-          <h2>@{{ result.handle }}</h2>
-          <span class="badge text-bg-light">{{ result.vibe }}</span>
-        </div>
-        <p class="meta">Overall Heartflow: <strong>{{ result.overall }}%</strong> · Tweets analyzed: {{ result.tweets_used }} · Signature: {{ result.signature }}</p>
+    <div class="status mt-3">Status: {{ status }}</div>
+    {% if error %}<div class="alert alert-danger mt-2" role="alert">{{ error }}</div>{% endif %}
 
-        <div class="grid">
-          {% for key, value in result.axes.items() %}
-          <div class="axis">
-            <div class="axis-head"><span>{{ key }}</span><span>{{ (value * 100)|round(1) }}%</span></div>
-            <div class="bar"><div class="bar-fill" style="width: {{ (value * 100)|round(1) }}%"></div></div>
+    <ul class="nav nav-tabs mt-3" role="tablist">
+      {% set tabs = ['overview','posts','trends','nodes','matrix','heatmap','clusters','drift','log'] %}
+      {% for t in tabs %}
+      <li class="nav-item" role="presentation">
+        <button class="nav-link {% if active_tab == t %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-{{ t }}" type="button">{{ t|capitalize }}</button>
+      </li>
+      {% endfor %}
+    </ul>
+
+    <div class="tab-content pt-3">
+      <section id="tab-overview" class="tab-pane fade {% if active_tab == 'overview' %}show active{% endif %}">
+        {% if result %}
+        <div class="result">
+          <div class="headline">
+            <h2>@{{ result.handle }}</h2>
+            <span class="badge text-bg-light">{{ result.vibe }}</span>
           </div>
-          {% endfor %}
-        </div>
-
-        <div class="quantum-box mt-4">
-          <h3>Quantum Simulation Layer</h3>
-          <p>Coherence: <strong>{{ result.quantum.coherence }}</strong> · Entropy bits: <strong>{{ result.quantum.entropy_bits }}</strong> · Entanglement bits: <strong>{{ result.quantum.entanglement_bits }}</strong></p>
-          <p class="small text-info">Dominant modes:
-            {% for mode in result.quantum.dominant_modes %}
-              <span class="mode-pill">{{ mode.axis }} {{ (mode.weight * 100)|round(1) }}%</span>
+          <p class="meta">HF: <strong>{{ result.score }}</strong> · Overall: {{ result.overall }}% · Confidence: {{ result.confidence }} · Risk: {{ result.risk_score }} · Sig: {{ result.signature }}</p>
+          <p class="small text-warning">Flags: {{ result.flags|join(', ') or 'none' }}</p>
+          <p>{{ result.reasoning }}</p>
+          <div class="grid">
+            {% for key, value in result.axes.items() %}
+            <div class="axis">
+              <div class="axis-head"><span>{{ key }}</span><span>{{ (value * 100)|round(1) }}%</span></div>
+              <div class="bar"><div class="bar-fill" style="width: {{ (value * 100)|round(1) }}%"></div></div>
+            </div>
             {% endfor %}
-          </p>
-          <p class="small">Trajectory: {{ result.quantum.trajectory }}</p>
-        </div>
+          </div>
 
-        <div class="outlook-grid mt-4">
-          {% for step in result.outlooks %}
-          <article class="outlook">
-            <h4>{{ step.horizon }} · {{ step.title }}</h4>
-            <p>{{ step.focus }}</p>
-            <ul>
-              {% for action in step.actions %}
-              <li>{{ action }}</li>
-              {% endfor %}
-            </ul>
-            <p class="milestone">Milestone: {{ step.milestone }}</p>
-          </article>
-          {% endfor %}
-        </div>
+          <div class="quantum-box mt-3">
+            <h3>Quantum Metrics</h3>
+            <p>Coherence: <strong>{{ result.quantum.coherence }}</strong> · Entropy bits: <strong>{{ result.quantum.entropy_bits }}</strong> · Entanglement bits: <strong>{{ result.quantum.entanglement_bits }}</strong></p>
+            <p>ent_bits: <strong>{{ result.quantum.ent_bits }}</strong> · mutual_bits: <strong>{{ result.quantum.mutual_bits }}</strong> · kicks_used: {{ result.quantum.kicks_used }}</p>
+            <p class="small">Dominant: {% for mode in result.quantum.dominant_modes %}<span class="mode-pill">{{ mode.axis }} {{ (mode.weight * 100)|round(1) }}%</span>{% endfor %}</p>
+            <p class="small">Trajectory: {{ result.quantum.trajectory }}</p>
+          </div>
 
-        <div class="trips mt-4">
-          <h3>Trips to Become a Better Human</h3>
-          {% for trip in result.human_trips %}
-          <div class="trip-card">
-            <h5>{{ trip.name }}</h5>
-            <p><strong>Why:</strong> {{ trip.why }}</p>
-            <p><strong>Challenge:</strong> {{ trip.challenge }}</p>
+          {% if result.llm %}
+          <div class="quantum-box mt-3">
+            <h3>LLM Results (sanitized)</h3>
+            <p>{{ result.llm.vibe_summary }}</p>
+            {% if result.llm.strengths %}<p class="small text-success mb-1"><strong>Strengths</strong></p><ul>{% for s in result.llm.strengths %}<li>{{ s }}</li>{% endfor %}</ul>{% endif %}
+            {% if result.llm.risks %}<p class="small text-warning mb-1"><strong>Risks</strong></p><ul>{% for r in result.llm.risks %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}
+            {% if result.llm.advice %}<p class="small text-info mb-1"><strong>Advice</strong></p><ul>{% for a in result.llm.advice %}<li>{{ a }}</li>{% endfor %}</ul>{% endif %}
+          </div>
+
+          {% if result.llm.outlooks %}
+          <div class="outlook-grid mt-3">
+            {% for step in result.llm.outlooks %}
+            <article class="outlook">
+              <h4>{{ step.horizon }} · {{ step.title }}</h4>
+              <p>{{ step.focus }}</p>
+              <ul>{% for action in step.actions %}<li>{{ action }}</li>{% endfor %}</ul>
+              <p class="milestone">Milestone: {{ step.milestone }}</p>
+            </article>
+            {% endfor %}
+          </div>
+          {% endif %}
+
+          {% if result.llm.human_trips %}
+          <div class="trips mt-3">
+            <h3>LLM Human Trips</h3>
+            {% for trip in result.llm.human_trips %}
+            <div class="trip-card">
+              <h5>{{ trip.name }}</h5>
+              <p><strong>Why:</strong> {{ trip.why }}</p>
+              <p><strong>Challenge:</strong> {{ trip.challenge }}</p>
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% endif %}
+        </div>
+        {% else %}
+          <p>No analysis yet.</p>
+        {% endif %}
+      </section>
+
+      <section id="tab-posts" class="tab-pane fade {% if active_tab == 'posts' %}show active{% endif %}">
+        {% if posts %}
+          {% for p in posts %}
+          <div class="item-card">
+            <div class="small text-info">{{ p.created_at }} · ❤️{{ p.likes }} · 🔁{{ p.rts }}</div>
+            <div>{{ p.text }}</div>
           </div>
           {% endfor %}
-        </div>
+        {% else %}
+          <p>No posts loaded.</p>
+        {% endif %}
       </section>
-      {% endif %}
-    </section>
-  </main>
-  <script src="{{ bootstrap_js.src }}" integrity="{{ bootstrap_js.integrity }}" crossorigin="anonymous"></script>
+
+      <section id="tab-trends" class="tab-pane fade {% if active_tab == 'trends' %}show active{% endif %}">
+        {% if trends %}
+          {% for t in trends %}<div class="item-card"><strong>{{ t.name }}</strong> · volume {{ t.volume }}</div>{% endfor %}
+        {% else %}
+          <p>No trends loaded yet.</p>
+        {% endif %}
+      </section>
+
+      <section id="tab-nodes" class="tab-pane fade {% if active_tab == 'nodes' %}show active{% endif %}">
+        {% if panels.node_rows %}
+          {% for n in panels.node_rows %}
+          <div class="item-card">
+            <div><strong>@{{ n.name }}</strong> · {{ n.node_type }} · HF={{ n.score }} · conf={{ n.confidence }} · risk={{ n.risk }} · ent={{ n.ent }}b · I={{ n.mutual }}b</div>
+            <div class="small">{{ n.axes }}</div>
+            <div class="small">drift: {{ n.drift }} · flags: {{ n.flags }}</div>
+            {% if n.reasoning %}<div class="small">note: {{ n.reasoning }}</div>{% endif %}
+          </div>
+          {% endfor %}
+        {% else %}
+          <p>No nodes yet.</p>
+        {% endif %}
+      </section>
+
+      <section id="tab-matrix" class="tab-pane fade {% if active_tab == 'matrix' %}show active{% endif %}"><pre>{{ panels.matrix }}</pre></section>
+      <section id="tab-heatmap" class="tab-pane fade {% if active_tab == 'heatmap' %}show active{% endif %}"><pre>{{ panels.heatmap }}</pre></section>
+      <section id="tab-clusters" class="tab-pane fade {% if active_tab == 'clusters' %}show active{% endif %}"><pre>{{ panels.clusters }}</pre></section>
+      <section id="tab-drift" class="tab-pane fade {% if active_tab == 'drift' %}show active{% endif %}"><pre>{{ panels.drift }}</pre></section>
+      <section id="tab-log" class="tab-pane fade {% if active_tab == 'log' %}show active{% endif %}"><pre>{{ panels.logs }}</pre></section>
+    </div>
+  </section>
+</main>
+<script src="{{ bootstrap_js.src }}" integrity="{{ bootstrap_js.integrity }}" crossorigin="anonymous"></script>
 </body>
 </html>
