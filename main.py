@@ -56,6 +56,106 @@ AXIS_TERMS = {
     "CAP": ["risk", "hard", "challenge", "truth", "fight", "bold", "stance"],
     "HCS": ["together", "align", "peace", "respect", "team", "bridge", "listen"],
 }
+No markdown. Do not invent facts outside provided evidence.
+"""
+
+app = Flask(__name__, template_folder="templates", static_folder="static")
+app.config.update(
+    SECRET_KEY=SECRET_KEY,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.getenv("SESSION_COOKIE_SECURE", "0") == "1",
+)
+
+
+@dataclass
+class HFHistoryPoint:
+    ts: datetime
+    score: float
+    axes: Dict[str, float]
+    confidence: float
+    risk_score: float
+    ent_bits: float
+    mutual_bits: float
+    rgb: Tuple[int, int, int]
+    flags: List[str] = field(default_factory=list)
+
+
+@dataclass
+class HFNode:
+    name: str
+    node_type: str
+    score: float
+    axes: Dict[str, float]
+    confidence: float
+    risk_score: float
+    ent_bits: float
+    mutual_bits: float
+    rgb: Tuple[int, int, int]
+    flags: List[str]
+    reasoning: str
+    last_updated: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    history: List[HFHistoryPoint] = field(default_factory=list)
+
+
+class AppState:
+    def __init__(self) -> None:
+        self.nodes: Dict[str, HFNode] = {}
+        self.log_lines: List[str] = []
+        self.trend_names: List[str] = []
+        self.lock = Lock()
+
+
+STATE = AppState()
+
+
+def now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def clamp(x: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, x))
+
+
+def dedupe(xs: List[str]) -> List[str]:
+    seen = set()
+    out = []
+    for x in xs:
+        s = str(x)
+        if s not in seen:
+            seen.add(s)
+            out.append(s)
+    return out
+
+
+def spark(values: List[float]) -> str:
+    if not values:
+        return ""
+    bars = "▁▂▃▄▅▆▇█"
+    lo, hi = min(values), max(values)
+    if abs(hi - lo) < 1e-12:
+        return bars[0] * len(values)
+    chars = []
+    for v in values:
+        idx = int((v - lo) / (hi - lo) * (len(bars) - 1))
+        chars.append(bars[max(0, min(idx, len(bars) - 1))])
+    return "".join(chars)
+
+
+def heat_cell(v: float) -> str:
+    if v >= 0.90:
+        return "██"
+    if v >= 0.80:
+        return "▓▓"
+    if v >= 0.65:
+        return "▒▒"
+    if v >= 0.50:
+        return "░░"
+    return "··"
+
+
+def safe_compact_text(s: str, lim: int) -> str:
+    return re.sub(r"\s+", " ", (s or "").strip())[:lim]
 
 WRITE_GROUPS = ["red", "amber", "green", "blue", "violet"]
 WRITE_LOCKS = {g: Lock() for g in WRITE_GROUPS}
@@ -418,7 +518,58 @@ def derive_quantum_insight(axes: Dict[str, float], colorwheel: Dict[str, Any]) -
         "interference_pattern": sanitize_text("High CAP + lower HCS can fragment message coherence under pressure.", 260),
         "phase_shift_move": sanitize_text("Use one bold thesis + one bridge sentence per public statement to stabilize resonance.", 260),
     }
+    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
+    async with httpx.AsyncClient(timeout=HF_REQUEST_TIMEOUT) as client:
+        r = await client.post(f"{HF_OPENAI_BASE_URL.rstrip('/')}/chat/completions", headers=headers, json=req)
+        r.raise_for_status()
+        content = r.json().get("choices", [{}])[0].get("message", {}).get("content", "{}")
+        return _extract_json_object(content)
 
+
+def _hash_to_unit_interval(s: str, salt: str = "") -> float:
+    h = hashlib.sha256((salt + s).encode("utf-8")).hexdigest()
+    return (int(h[:16], 16) % (10**12)) / float(10**12)
+
+
+def _post_kick_angles(posts: List[str]) -> List[Tuple[int, float, float]]:
+    kicks: List[Tuple[int, float, float]] = []
+    for i, text in enumerate(posts[:HF_HISTORY_LIMIT]):
+        t = safe_compact_text(text, 280)
+        if not t:
+            continue
+        w = i % 6
+        dphi = (_hash_to_unit_interval(t, "phi") - 0.5) * 0.28
+        dth = (_hash_to_unit_interval(t, "theta") - 0.5) * 0.22
+        kicks.append((w, dphi, dth))
+    return kicks
+
+
+def _axis_match_score(text: str, axis: str) -> float:
+    terms = AXIS_TERMS.get(axis, [])
+    t = text.lower()
+    return float(sum(t.count(term) for term in terms))
+
+
+def build_quantum_rag_surface(posts_text: List[str], axes: Dict[str, float], quantum: Dict[str, Any]) -> Dict[str, Any]:
+    scored = []
+    for idx, text in enumerate(posts_text[:HF_MAX_TWEETS]):
+        compact = safe_compact_text(text, 340)
+        if not compact:
+            continue
+        axis_scores = {axis: _axis_match_score(compact, axis) + axes.get(axis, 0.5) * 0.2 for axis in HF_AXES}
+        top_axis = sorted(axis_scores.items(), key=lambda x: x[1], reverse=True)[0][0]
+        phase_weight = ((idx + 1) / max(1, len(posts_text))) * (quantum.get("coherence", 0.5) + 0.35)
+        scored.append({
+            "text": compact,
+            "axis": top_axis,
+            "weight": round(clamp(axis_scores[top_axis] * phase_weight, 0.01, 1.0), 4),
+        })
+
+    scored = sorted(scored, key=lambda x: x["weight"], reverse=True)
+    per_axis: Dict[str, List[Dict[str, Any]]] = {k: [] for k in HF_AXES}
+    for row in scored:
+        if len(per_axis[row["axis"]]) < 3:
+            per_axis[row["axis"]].append(row)
 
 def derive_color_resonance(colorwheel: Dict[str, Any]) -> List[Dict[str, str]]:
     wheel = colorwheel.get("wheel", [])[:4]
@@ -439,6 +590,9 @@ def fallback_advanced_tracks() -> List[Dict[str, Any]]:
         {"track": "Relational", "priority": 4, "guidance": "Acknowledge critics and allies explicitly to widen trust bandwidth."},
     ]
 
+    seed_src = json.dumps({"axes": vec, "k": kicks[:16]}, sort_keys=True)
+    seed = int(hashlib.sha256(seed_src.encode()).hexdigest(), 16)
+    rgb = ((seed >> 8) & 255, (seed >> 16) & 255, (seed >> 24) & 255)
 
 def quantum_rag_packet(handle: str, axes: Dict[str, float], colorwheel: Dict[str, Any]) -> Dict[str, Any]:
     seed = hashlib.sha256(f"{handle}|{axes}|{colorwheel.get('entropy_digest_short','')}".encode()).digest()
@@ -834,6 +988,11 @@ PAGE = """
 def index():
     prefill = sanitize_text(request.args.get('handle', ''), 15)
     return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=None, handle_prefill=prefill)
+
+
+@app.get("/")
+def index():
+    return render_dashboard()
 
 
 @app.post("/analyze")
