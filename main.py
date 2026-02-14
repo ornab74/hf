@@ -9,6 +9,7 @@ import secrets
 import sqlite3
 import time
 import xml.etree.ElementTree as ET
+from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 from threading import Lock, current_thread
@@ -60,6 +61,12 @@ AXIS_TERMS = {
 WRITE_GROUPS = ["red", "amber", "green", "blue", "violet"]
 WRITE_LOCKS = {g: Lock() for g in WRITE_GROUPS}
 
+
+RATE_LIMIT_PER_MIN = int(os.getenv("HF_RATE_LIMIT_PER_MIN", "8"))
+RATE_LIMIT_BURST_10M = int(os.getenv("HF_RATE_LIMIT_BURST_10M", "30"))
+RATE_LIMIT_STATE: Dict[str, deque] = defaultdict(deque)
+RATE_LOCK = Lock()
+CAPTCHA_TTL_SECONDS = int(os.getenv("HF_CAPTCHA_TTL_SECONDS", "600"))
 
 def write_group_for_payload(handle: str) -> str:
     vm = psutil.virtual_memory().percent
@@ -242,6 +249,53 @@ def csrf_ok(token: str) -> bool:
     stored = session.get("csrf", "")
     return bool(stored and token) and hmac.compare_digest(stored, token)
 
+
+
+
+def client_fingerprint() -> str:
+    hdr = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+    ip = hdr or request.remote_addr or "unknown"
+    ua = request.headers.get("User-Agent", "unknown")[:160]
+    return f"{ip}|{ua}"
+
+
+def rate_limit_ok(key: str) -> bool:
+    now = time.time()
+    with RATE_LOCK:
+        q = RATE_LIMIT_STATE[key]
+        while q and now - q[0] > 600:
+            q.popleft()
+        in_last_min = sum(1 for t in q if now - t <= 60)
+        if in_last_min >= RATE_LIMIT_PER_MIN or len(q) >= RATE_LIMIT_BURST_10M:
+            return False
+        q.append(now)
+        return True
+
+
+def issue_captcha() -> Dict[str, str]:
+    a = secrets.randbelow(9) + 1
+    b = secrets.randbelow(9) + 1
+    salt = secrets.token_hex(2)
+    cid = secrets.token_urlsafe(10)
+    answer = str((a + b) % 10) + salt[0]
+    bucket = session.get("captcha_bucket", {})
+    bucket[cid] = {"answer": answer, "ts": time.time()}
+    # prune stale challenges
+    fresh = {k: v for k, v in bucket.items() if time.time() - float(v.get("ts", 0)) <= CAPTCHA_TTL_SECONDS}
+    session["captcha_bucket"] = fresh
+    return {"id": cid, "prompt": f"Entropy gate: ({a}+{b}) mod 10 then append '{salt[0]}'"}
+
+
+def captcha_ok(captcha_id: str, answer: str) -> bool:
+    bucket = session.get("captcha_bucket", {})
+    row = bucket.get(captcha_id)
+    if not row:
+        return False
+    expected = str(row.get("answer", ""))
+    # one-time use
+    bucket.pop(captcha_id, None)
+    session["captcha_bucket"] = bucket
+    return bool(expected and answer) and hmac.compare_digest(expected, sanitize_text(answer, 8))
 
 def sanitize_text(v: Any, n: int = 320) -> str:
     raw = str(v or "")
@@ -481,6 +535,43 @@ def quantum_rag_packet(handle: str, axes: Dict[str, float], colorwheel: Dict[str
     }
 
 
+def quantum_rag_packet(handle: str, axes: Dict[str, float], colorwheel: Dict[str, Any]) -> Dict[str, Any]:
+    seed = hashlib.sha256(f"{handle}|{axes}|{colorwheel.get('entropy_digest_short','')}".encode()).digest()
+    params = [((seed[i] / 255.0) * 3.14159) for i in range(8)]
+    dev = qml.device("default.qubit", wires=3)
+
+    @qml.qnode(dev)
+    def circuit(v):
+        qml.Hadamard(wires=0)
+        qml.RX(v[0], wires=0)
+        qml.RY(v[1], wires=1)
+        qml.RZ(v[2], wires=2)
+        qml.CNOT(wires=[0, 1])
+        qml.CRY(v[3], wires=[1, 2])
+        qml.IsingXX(v[4], wires=[0, 2])
+        qml.IsingYY(v[5], wires=[0, 1])
+        qml.IsingZZ(v[6], wires=[1, 2])
+        qml.PhaseShift(v[7], wires=0)
+        return qml.state()
+
+    st = circuit(params)
+    probs = [float(abs(a) ** 2) for a in st]
+    phase = [float(getattr(a, 'imag', 0.0)) for a in st]
+    top_idx = sorted(range(len(probs)), key=lambda i: probs[i], reverse=True)[:3]
+    top_states = [{"basis": format(i, '03b'), "prob": round(probs[i], 6)} for i in top_idx]
+
+    cpu = psutil.cpu_percent(interval=0.0)
+    ram = psutil.virtual_memory().percent
+    return {
+        "gate_sequence": ["H", "RX", "RY", "RZ", "CNOT", "CRY", "IsingXX", "IsingYY", "IsingZZ", "PhaseShift"],
+        "top_states": top_states,
+        "phase_signature": [round(x, 6) for x in phase[:4]],
+        "probs_entropy": round(float(-sum((p * (0.0 if p <= 1e-12 else math.log(p, 2))) for p in probs)), 6),
+        "cpu_percent": cpu,
+        "ram_percent": ram,
+    }
+
+
 def deterministic_date_vector(axes: Dict[str, float], quantum_rag: Dict[str, Any]) -> List[Dict[str, Any]]:
     now = datetime.now(timezone.utc).date()
     cpu_bias = int(quantum_rag.get("cpu_percent", 0) // 10)
@@ -533,6 +624,16 @@ def choose_text(value: Any, fallback: str, limit: int) -> str:
 def normalized_band(value: Any, fallback: str = "medium") -> str:
     v = sanitize_text(value, 12).lower()
     return v if v in {"low", "medium", "high"} else fallback
+
+
+def bot_depoison_advice(handle: str, axes: Dict[str, float], layers: Dict[str, Any]) -> List[str]:
+    return [
+        sanitize_text(f"@{handle}: declare objective + data source + uncertainty for each automated message to reduce manipulative drift.", 280),
+        sanitize_text("Run a toxic-pattern filter pass before publish: remove absolutist, inflammatory, or dehumanizing framing.", 280),
+        sanitize_text(f"Use layer {layers.get('style_layer')} for throttle discipline: 1 high-signal post per cycle, then wait for feedback.", 280),
+        sanitize_text("Attach a corrective protocol: if factual error detected, post correction within one cycle and pin update.", 280),
+    ]
+
 def derive_cognitive_insights(tweets: List[str], axes: Dict[str, float]) -> List[Dict[str, str]]:
     blob = " ".join(tweets).lower()
     urgency = any(k in blob for k in ["now", "urgent", "immediately", "asap"])
@@ -596,7 +697,7 @@ def deterministic_risk_simulations(axes: Dict[str, float], quantum_rag: Dict[str
     }
 
 
-def analyze_handle(handle: str) -> Dict[str, Any]:
+def analyze_handle(handle: str, actor_type: str = "human") -> Dict[str, Any]:
     tweets = fetch_recent_tweets(handle)
     base_axes = deterministic_axes(tweets)
     colorwheel = entropic_colorwheel(base_axes)
@@ -629,6 +730,7 @@ def analyze_handle(handle: str) -> Dict[str, Any]:
     risk_fallback = deterministic_risk_simulations(axes, quantum_rag, dynamic_layers)
     cognitive_fallback = derive_cognitive_insights(tweets, axes)
     lore_fallback = generate_lore_brief(handle, axes, dynamic_layers, quantum_rag)
+    is_bot = sanitize_text(actor_type, 12).lower() == "bot"
 
     suggestions = [sanitize_text(x, 420) for x in (llm.get("suggestions") or [])[:10] if sanitize_text(x, 420)]
     if not suggestions:
@@ -765,6 +867,8 @@ def analyze_handle(handle: str) -> Dict[str, Any]:
             if isinstance(x, dict) and sanitize_text(x.get("focus", ""), 120)
         ],
         "lore_brief": choose_text(llm.get("lore_brief"), lore_fallback, 1500),
+        "actor_type": "bot" if is_bot else "human",
+        "bot_advice": [sanitize_text(x, 280) for x in ((llm.get("bot_advice") if is_bot else []) or bot_depoison_advice(handle, axes, dynamic_layers))[:6]] if is_bot else [],
         "quantum_rag": quantum_rag,
         "dynamic_prompt_layers": dynamic_layers,
         "tweet_count": len(tweets),
@@ -815,8 +919,9 @@ PAGE = """
 
     <form method='post' action='/analyze' id='f'>
       <input type='hidden' name='csrf_token' value='{{ csrf_token }}'/>
+      <input type='hidden' name='captcha_id' value='{{ captcha.id }}'/>
       <div class='in'><span>@</span><input id='handle' name='handle' maxlength='15' placeholder='elonmusk' value='{{ handle_prefill }}' required/></div>
-      <div class='btn-wrap'><button id='train-btn' class='btn' type='submit'><span>⚡ Train HeartFlow Profile</span><span class='spin'></span></button></div>
+      <div class='panel'><p class='meta'><strong>Verification:</strong> {{ captcha.prompt }}</p><div class='in'><input name='captcha_answer' maxlength='8' placeholder='enter gate code' required/></div><div class='in' style='margin-top:.5rem'><span>role</span><select name='actor_type' style='width:100%;background:transparent;color:#fff;border:none;outline:none'><option value='human'>human</option><option value='bot'>bot</option></select></div></div><div class='btn-wrap'><button id='train-btn' class='btn' type='submit'><span>⚡ Train HeartFlow Profile</span><span class='spin'></span></button></div>
     </form>
     <div id='loader' class='loader'>Running secure analysis + future simulations…</div>
 
@@ -838,6 +943,8 @@ PAGE = """
     <div class='panel'><h3>Simulated Inner Narrative</h3><p>{{ result.simulated_inner_text }}</p></div>
 
     <div class='panel'><h3>Lore Brief</h3><p>{{ result.lore_brief }}</p></div>
+
+    {% if result.actor_type == 'bot' and result.bot_advice %}<div class='panel'><h3>Bot De-poisoning Protocol</h3><ul>{% for a in result.bot_advice %}<li>{{a}}</li>{% endfor %}</ul></div>{% endif %}
 
     {% if result.cognitive_insights %}<div class='panel'><h3>Cognitive Insights & Improvements</h3>{% for c in result.cognitive_insights %}<p><strong>{{c.signal}}</strong><br/>{{c.interpretation}}<br/><em>Improve:</em> {{c.improvement}}</p>{% endfor %}</div>{% endif %}
 
@@ -900,25 +1007,31 @@ PAGE = """
 @app.get("/")
 def index():
     prefill = sanitize_text(request.args.get('handle', ''), 15)
-    return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=None, handle_prefill=prefill)
+    return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=None, handle_prefill=prefill, captcha=issue_captcha())
 
 
 @app.post("/analyze")
 def analyze():
     if not csrf_ok(request.form.get("csrf_token", "")):
         return make_response("CSRF validation failed", 400)
+    if not captcha_ok(request.form.get("captcha_id", ""), request.form.get("captcha_answer", "")):
+        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error="Captcha failed. Please retry.", handle_prefill=request.form.get('handle', ''), captcha=issue_captcha())
+    if not rate_limit_ok(client_fingerprint()):
+        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error="Rate limit exceeded. Please wait and retry.", handle_prefill=request.form.get('handle', ''), captcha=issue_captcha())
     try:
         handle = sanitize_handle(request.form.get("handle", ""))
-        result = analyze_handle(handle)
+        actor_type = sanitize_text(request.form.get("actor_type", "human"), 12).lower()
+        actor_type = "bot" if actor_type == "bot" else "human"
+        result = analyze_handle(handle, actor_type=actor_type)
         save_analysis(handle, result)
-        return render_template_string(PAGE, csrf_token=csrf_token(), result=result, recent=recent_analyses(), error=None, handle_prefill=handle)
+        return render_template_string(PAGE, csrf_token=csrf_token(), result=result, recent=recent_analyses(), error=None, handle_prefill=handle, captcha=issue_captcha())
     except Exception as exc:
-        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=sanitize_text(exc, 300), handle_prefill=request.form.get('handle', ''))
+        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=sanitize_text(exc, 300), handle_prefill=request.form.get('handle', ''), captcha=issue_captcha())
 
 
 @app.get("/healthz")
 def healthz():
-    return {"ok": True, "db": os.path.exists(DB_PATH), "db_path": DB_PATH, "write_groups": WRITE_GROUPS, "model": HF_OPENAI_MODEL}
+    return {"ok": True, "db": os.path.exists(DB_PATH), "db_path": DB_PATH, "write_groups": WRITE_GROUPS, "model": HF_OPENAI_MODEL, "rate_limit_per_min": RATE_LIMIT_PER_MIN}
 
 
 if __name__ == "__main__":
