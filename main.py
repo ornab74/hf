@@ -441,6 +441,7 @@ def fallback_advanced_tracks() -> List[Dict[str, Any]]:
         {"track": "Strategic", "priority": 5, "guidance": "Publish a 3-part narrative arc: thesis, risk, and execution proof."},
         {"track": "Relational", "priority": 4, "guidance": "Acknowledge critics and allies explicitly to widen trust bandwidth."},
     ]
+    return [{k: sanitize_text(v, 260 if k!='signal' else 140) for k,v in item.items()} for item in insights]
 
 
 def quantum_rag_packet(handle: str, axes: Dict[str, float], colorwheel: Dict[str, Any]) -> Dict[str, Any]:
@@ -557,32 +558,6 @@ def derive_cognitive_insights(tweets: List[str], axes: Dict[str, float]) -> List
     return [{k: sanitize_text(v, 260 if k!='signal' else 140) for k,v in item.items()} for item in insights]
 
 
-def derive_diet_suggestions(tweets: List[str], axes: Dict[str, float], risk_sim: Dict[str, Any]) -> List[Dict[str, str]]:
-    blob = " ".join(tweets).lower()
-    travel_heavy = any(k in blob for k in ["flight", "travel", "launch", "factory", "tour"])
-    cap = axes.get("CAP", 0.5)
-    cancer_band = risk_sim.get("cancer_risk", "medium")
-    base = [
-        {
-            "focus": "Anti-inflammatory baseline",
-            "why": f"Useful when stress load and uncertainty cycles are elevated (risk: {cancer_band}).",
-            "protocol": "Prioritize omega-3 fish/plant fats, cruciferous vegetables, berries, olive oil; minimize ultra-processed sugars.",
-        },
-        {
-            "focus": "Cognitive stability fueling",
-            "why": "Supports sustained focus for strategic communication and execution windows.",
-            "protocol": "Protein-forward breakfast + hydration target (2-3L/day) + magnesium-rich evening meal.",
-        },
-    ]
-    if travel_heavy or cap > 0.62:
-        base.append({
-            "focus": "Travel/meeting resilience stack",
-            "why": "Reduces decision fatigue during high-mobility periods.",
-            "protocol": "Pre-pack high-fiber snacks, avoid late heavy meals, and keep caffeine cutoff 8 hours before sleep.",
-        })
-    return [{k: sanitize_text(v, 260 if k=='protocol' else 240 if k=='why' else 120) for k,v in item.items()} for item in base[:4]]
-
-
 def generate_lore_brief(handle: str, axes: Dict[str, float], layers: Dict[str, Any], quantum_rag: Dict[str, Any]) -> str:
     return sanitize_text(
         f"In the {layers.get('style_layer')} cycle, @{handle} sits at the intersection of velocity and stewardship. "
@@ -653,7 +628,6 @@ def analyze_handle(handle: str) -> Dict[str, Any]:
     resonance_fallback = derive_color_resonance(colorwheel)
     risk_fallback = deterministic_risk_simulations(axes, quantum_rag, dynamic_layers)
     cognitive_fallback = derive_cognitive_insights(tweets, axes)
-    diet_fallback = derive_diet_suggestions(tweets, axes, risk_fallback)
     lore_fallback = generate_lore_brief(handle, axes, dynamic_layers, quantum_rag)
 
     suggestions = [sanitize_text(x, 420) for x in (llm.get("suggestions") or [])[:10] if sanitize_text(x, 420)]
@@ -783,12 +757,12 @@ def analyze_handle(handle: str) -> Dict[str, Any]:
         ],
         "diet_suggestions": [
             {
-                "focus": choose_text(x.get("focus", ""), "Performance nutrition", 120),
-                "why": choose_text(x.get("why", ""), "Supports sustained cognitive and operational performance.", 240),
-                "protocol": choose_text(x.get("protocol", ""), "Balanced protein, fiber, hydration, and anti-inflammatory foods.", 260),
+                "focus": sanitize_text(x.get("focus", ""), 120),
+                "why": sanitize_text(x.get("why", ""), 240),
+                "protocol": sanitize_text(x.get("protocol", ""), 260),
             }
-            for x in ((llm.get("diet_suggestions") or diet_fallback)[:6])
-            if isinstance(x, dict)
+            for x in ((llm.get("diet_suggestions") or [])[:6])
+            if isinstance(x, dict) and sanitize_text(x.get("focus", ""), 120)
         ],
         "lore_brief": choose_text(llm.get("lore_brief"), lore_fallback, 1500),
         "quantum_rag": quantum_rag,
