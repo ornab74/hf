@@ -441,6 +441,7 @@ def fallback_advanced_tracks() -> List[Dict[str, Any]]:
         {"track": "Strategic", "priority": 5, "guidance": "Publish a 3-part narrative arc: thesis, risk, and execution proof."},
         {"track": "Relational", "priority": 4, "guidance": "Acknowledge critics and allies explicitly to widen trust bandwidth."},
     ]
+    return [{k: sanitize_text(v, 260 if k!='signal' else 140) for k,v in item.items()} for item in insights]
 
 
 def quantum_rag_packet(handle: str, axes: Dict[str, float], colorwheel: Dict[str, Any]) -> Dict[str, Any]:
