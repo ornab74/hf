@@ -3,7 +3,8 @@ FROM python:3.12-slim
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    HF_DB_PATH=/var/data/hf_secure.db
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -35,13 +36,14 @@ else:
 PY
 
 RUN useradd -ms /bin/bash appuser \
- && mkdir -p /app/static \
- && chmod 755 /app/static \
- && chown -R appuser:appuser /app
+ && mkdir -p /app/static /var/data \
+ && chmod 755 /app/static /var/data \
+ && chown -R appuser:appuser /app /var/data
 
 USER appuser
 
 EXPOSE 3000
+VOLUME ["/var/data"]
 
 # Render and other platforms inject PORT/WEB_CONCURRENCY at runtime.
 # Bind dynamically so health checks target the correct port.

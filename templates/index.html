@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>HeartFlow Web Console</title>
   <link rel="stylesheet" href="{{ bootstrap_css.href }}" integrity="{{ bootstrap_css.integrity }}" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/orbitron@5.0.18/700.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 <main class="hf-shell">
-  <section class="glass-card" {% if result %}style="background-image: {{ result.glass }};"{% endif %}>
-    <h1 class="title">HeartFlow Web Console</h1>
-    <p class="subtitle">TUI features moved into the web UI (except carousel).</p>
+  <section class="glass-card" {% if result %}style="--hf-glass: {{ result.glass }};"{% endif %}>
+    <h1 class="title">HeartFlow Trainer Console</h1>
+    <p class="subtitle">Advanced HF scoring, simulation-driven coaching, and quantum-RAG grounded planning.</p>
 
     <form method="post" action="{{ url_for('analyze') }}" class="hf-form mb-2">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
@@ -19,7 +20,12 @@
         <span class="at">@</span>
         <input name="handle" id="handle" placeholder="username" maxlength="15" required>
       </div>
-      <button class="btn btn-primary" type="submit">Analyze Handle</button>
+      <div class="trainer-btn-wrap">
+        <button class="btn btn-primary trainer-btn" id="train-btn" type="submit">
+          <span class="btn-label">⚡ Train HeartFlow Profile</span>
+          <span class="spinner-border spinner-border-sm btn-spinner" role="status" aria-hidden="true"></span>
+        </button>
+      </div>
     </form>
 
     <div class="mini-actions">
@@ -45,6 +51,10 @@
 
     <div class="status mt-3">Status: {{ status }}</div>
     {% if error %}<div class="alert alert-danger mt-2" role="alert">{{ error }}</div>{% endif %}
+    <div id="loading-indicator" class="loading-indicator" aria-live="polite" hidden>
+      <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
+      <span>Running deep HF simulation + quantum RAG pass…</span>
+    </div>
 
     <ul class="nav nav-tabs mt-3" role="tablist">
       {% set tabs = ['overview','posts','trends','nodes','matrix','heatmap','clusters','drift','log'] %}
@@ -66,6 +76,9 @@
           <p class="meta">HF: <strong>{{ result.score }}</strong> · Overall: {{ result.overall }}% · Confidence: {{ result.confidence }} · Risk: {{ result.risk_score }} · Sig: {{ result.signature }}</p>
           <p class="small text-warning">Flags: {{ result.flags|join(', ') or 'none' }}</p>
           <p>{{ result.reasoning }}</p>
+          {% if result.simulated_inner_text %}<div class="sim-box mt-2"><h3>Simulated Inner Narrative</h3><p>{{ result.simulated_inner_text }}</p></div>{% endif %}
+          {% if result.counterfactuals %}<p class="small text-light mb-1"><strong>Counterfactuals</strong></p><ul>{% for c in result.counterfactuals %}<li>{{ c }}</li>{% endfor %}</ul>{% endif %}
+          {% if result.calibration_notes %}<p class="small text-info mb-1"><strong>Calibration Notes</strong></p><ul>{% for c in result.calibration_notes %}<li>{{ c }}</li>{% endfor %}</ul>{% endif %}
           <div class="grid">
             {% for key, value in result.axes.items() %}
             <div class="axis">
@@ -101,7 +114,7 @@
           {% if result.llm %}
           <div class="quantum-box mt-3">
             <h3>LLM Results (sanitized)</h3>
-            <p>{{ result.llm.vibe_summary }}</p>
+            <p class="long-copy">{{ result.llm.vibe_summary }}</p>
             {% if result.llm.strengths %}<p class="small text-success mb-1"><strong>Strengths</strong></p><ul>{% for s in result.llm.strengths %}<li>{{ s }}</li>{% endfor %}</ul>{% endif %}
             {% if result.llm.risks %}<p class="small text-warning mb-1"><strong>Risks</strong></p><ul>{% for r in result.llm.risks %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}
             {% if result.llm.advice %}<p class="small text-info mb-1"><strong>Advice</strong></p><ul>{% for a in result.llm.advice %}<li>{{ a }}</li>{% endfor %}</ul>{% endif %}
@@ -119,6 +132,54 @@
                 <p class="small text-info">Axis: {{ tr.evidence_axis }} · Confidence: {{ (tr.confidence * 100)|round(1) }}%</p>
                 <p>{{ tr.why_now }}</p>
                 <ul>{% for a in tr.actions %}<li>{{ a }}</li>{% endfor %}</ul>
+              </article>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
+          {% if result.llm.deep_dive_plan %}
+          <div class="quantum-box mt-3">
+            <h3>Deep Dive Plan</h3>
+            <div class="tracks-grid">
+              {% for d in result.llm.deep_dive_plan %}
+              <article class="track-card">
+                <h5>{{ d.phase }}</h5>
+                <p>{{ d.goal }}</p>
+                <ul>{% for t in d.tasks %}<li>{{ t }}</li>{% endfor %}</ul>
+                <p class="small text-info">Success metric: {{ d.metric }}</p>
+              </article>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
+          {% if result.llm.future_simulations %}
+          <div class="quantum-box mt-3">
+            <h3>Future Simulations</h3>
+            <div class="tracks-grid">
+              {% for fs in result.llm.future_simulations %}
+              <article class="track-card">
+                <h5>{{ fs.horizon }}</h5>
+                <p>{{ fs.scenario }}</p>
+                <p class="small text-success"><strong>Upside:</strong> {{ fs.upside }}</p>
+                <p class="small text-warning"><strong>Risk:</strong> {{ fs.risk }}</p>
+                <p class="small text-info"><strong>Steering move:</strong> {{ fs.steering_move }}</p>
+              </article>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
+          {% if result.llm.three_new_ideas %}
+          <div class="quantum-box mt-3">
+            <h3>3 New Ideas</h3>
+            <div class="tracks-grid">
+              {% for i in result.llm.three_new_ideas %}
+              <article class="track-card">
+                <h5>{{ i.title }}</h5>
+                <p>{{ i.why }}</p>
+                <p class="small"><strong>First step:</strong> {{ i.first_step }}</p>
               </article>
               {% endfor %}
             </div>
@@ -202,5 +263,18 @@
   </section>
 </main>
 <script src="{{ bootstrap_js.src }}" integrity="{{ bootstrap_js.integrity }}" crossorigin="anonymous"></script>
+<script>
+  document.querySelectorAll("form[action$='/analyze']").forEach((form)=>{
+    form.addEventListener("submit", ()=>{
+      const el=document.getElementById("loading-indicator");
+      const btn=document.getElementById("train-btn");
+      if(el){ el.hidden=false; }
+      if(btn){
+        btn.classList.add("is-loading");
+        btn.setAttribute("disabled","disabled");
+      }
+    });
+  });
+</script>
 </body>
 </html>

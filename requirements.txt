@@ -7,3 +7,7 @@ autoray==0.6.12
 textual==0.79.1
 python-dotenv==1.0.1
 gunicorn==25.0.3
+pennylane==0.38.0
+openai==2.20.0
+cryptography==44.0.1
+psutil==7.0.0

@@ -1,67 +1,33 @@
-# HeartFlow Web Console
+# HeartFlow Onefile Secure Trainer
 
-A Flask HeartFlow app that brings key TUI features into a browser dashboard (except post carousel).
+This app now runs as a **single-file `main.py`** Flask application with inline UI/CSS/JS.
 
-## What’s in the web UI now
+## Security additions
+- AES-GCM encrypted SQLite storage (`hf_secure.db`)
+- Boot-time key derivation from `ENCRYPTION_PASSPHRASE` + PBKDF2 salt
+- Extra entropy from `psutil` for key diversification
+- CSRF protection + hardened security headers
 
-- Handle analysis with LLM-backed 6-axis HeartFlow scoring (`SR`, `CT`, `CF`, `GDI_INV`, `CAP`, `HCS`)
-- LLM-generated synthesis (no hardwired trips/outlooks):
-  - vibe summary
-  - strengths / risks / advice
-  - quantum-RAG-grounded suggestion tracks + 7-day plan
-  - 1/5/10-year outlook cards
-  - human-trip challenge cards
-- Quantum metrics panel (ent bits, mutual bits, coherence, entropy, trajectory, dominant modes)
-- Quantum RAG surface built from tweet evidence slices (axis-tagged, weighted snippets)
-- TUI-style panels in tabs:
-  - Posts
-  - Trends
-  - HeartFlow Nodes
-  - Matrix
-  - Heatmap
-  - Clusters
-  - Drift
-  - Log
-- Batch scoring and trend scoring actions in web controls
-- Sanitization for user/model-rendered text + CSRF/session security headers
+## Required env vars
+- `ENCRYPTION_PASSPHRASE` (**required**)
 
-## Setup
-
-```bash
-pip install -r requirements.txt
-```
-
-## Environment variables
-
-- `OPENAI_API_KEY` (required for full LLM scoring/synthesis)
-- `HF_OPENAI_MODEL` (default: `gpt-4o-mini`)
-- `HF_OPENAI_BASE_URL` (default: OpenAI API URL)
-- `TWITTER_BEARER_TOKEN` (recommended for live tweets/trends)
-- `HF_MAX_TWEETS` (default: `32`)
-- `HF_SIMILARITY_THRESHOLD` (default: `0.80`)
-- `HF_REQUEST_TIMEOUT` (default: `25`)
-- `FLASK_SECRET_KEY` (recommended in production)
-- `SESSION_COOKIE_SECURE=1` (recommended behind HTTPS)
+## Optional env vars
+- `ENCRYPTION_SALT_B64` (if absent, generated at boot for process env)
+- `ENCRYPTION_BOOT_NONCE_B64` (if absent, generated at boot for process env)
+- `OPENAI_API_KEY`, `HF_OPENAI_MODEL`, `HF_OPENAI_BASE_URL`
+- `TWITTER_BEARER_TOKEN` (optional; if unset, app falls back to public Nitter RSS for tweet pull)
+- `FLASK_SECRET_KEY`
 
 ## Run
-
 ```bash
 python main.py
 ```
 
-Open `http://localhost:5000`.
-
-## Quick checks
-
-- `GET /healthz` returns `{"ok": true}`
-- `/analyze`, `/score_batch`, `/refresh_trends`, `/score_trends`, `/clear_nodes` require valid CSRF token
-
-## Production (Gunicorn)
-
+## Production
 ```bash
-gunicorn main:app -b 0.0.0.0:3000 -w 4 -k gthread --threads 4 --timeout 180 --graceful-timeout 30 --log-level info
+gunicorn main:app -b 0.0.0.0:${PORT:-3000} -w ${WEB_CONCURRENCY:-2} -k gthread --threads 4
 ```
 
-This matches the container production entrypoint and is recommended over Flask's dev server for deployment.
-
-The Docker image binds to `PORT` when provided (e.g., Render), defaulting to `3000`.
+## Persistent storage
+- Default encrypted DB path: `/var/data/hf_secure.db`
+- Override with `HF_DB_PATH` if needed
