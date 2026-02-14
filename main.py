@@ -495,6 +495,44 @@ def fallback_advanced_tracks() -> List[Dict[str, Any]]:
         {"track": "Strategic", "priority": 5, "guidance": "Publish a 3-part narrative arc: thesis, risk, and execution proof."},
         {"track": "Relational", "priority": 4, "guidance": "Acknowledge critics and allies explicitly to widen trust bandwidth."},
     ]
+    return [{k: sanitize_text(v, 260 if k!='signal' else 140) for k,v in item.items()} for item in insights]
+
+
+def quantum_rag_packet(handle: str, axes: Dict[str, float], colorwheel: Dict[str, Any]) -> Dict[str, Any]:
+    seed = hashlib.sha256(f"{handle}|{axes}|{colorwheel.get('entropy_digest_short','')}".encode()).digest()
+    params = [((seed[i] / 255.0) * 3.14159) for i in range(8)]
+    dev = qml.device("default.qubit", wires=3)
+
+    @qml.qnode(dev)
+    def circuit(v):
+        qml.Hadamard(wires=0)
+        qml.RX(v[0], wires=0)
+        qml.RY(v[1], wires=1)
+        qml.RZ(v[2], wires=2)
+        qml.CNOT(wires=[0, 1])
+        qml.CRY(v[3], wires=[1, 2])
+        qml.IsingXX(v[4], wires=[0, 2])
+        qml.IsingYY(v[5], wires=[0, 1])
+        qml.IsingZZ(v[6], wires=[1, 2])
+        qml.PhaseShift(v[7], wires=0)
+        return qml.state()
+
+    st = circuit(params)
+    probs = [float(abs(a) ** 2) for a in st]
+    phase = [float(getattr(a, 'imag', 0.0)) for a in st]
+    top_idx = sorted(range(len(probs)), key=lambda i: probs[i], reverse=True)[:3]
+    top_states = [{"basis": format(i, '03b'), "prob": round(probs[i], 6)} for i in top_idx]
+
+    cpu = psutil.cpu_percent(interval=0.0)
+    ram = psutil.virtual_memory().percent
+    return {
+        "gate_sequence": ["H", "RX", "RY", "RZ", "CNOT", "CRY", "IsingXX", "IsingYY", "IsingZZ", "PhaseShift"],
+        "top_states": top_states,
+        "phase_signature": [round(x, 6) for x in phase[:4]],
+        "probs_entropy": round(float(-sum((p * (0.0 if p <= 1e-12 else math.log(p, 2))) for p in probs)), 6),
+        "cpu_percent": cpu,
+        "ram_percent": ram,
+    }
 
 
 def quantum_rag_packet(handle: str, axes: Dict[str, float], colorwheel: Dict[str, Any]) -> Dict[str, Any]:
