@@ -8,7 +8,6 @@ import re
 import secrets
 import sqlite3
 import time
-import xml.etree.ElementTree as ET
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
@@ -34,6 +33,7 @@ HF_REQUEST_TIMEOUT = float(os.getenv("HF_REQUEST_TIMEOUT", "30"))
 FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY") or secrets.token_urlsafe(32)
 ENCRYPTION_PASSPHRASE = os.getenv("ENCRYPTION_PASSPHRASE", "")
 DB_PATH = os.getenv("HF_DB_PATH", "/var/data/hf_secure.db")
+X_COMPLIANCE_STRICT = os.getenv("X_COMPLIANCE_STRICT", "1") == "1"
 
 if not ENCRYPTION_PASSPHRASE:
     raise RuntimeError("ENCRYPTION_PASSPHRASE must be set.")
@@ -67,6 +67,10 @@ RATE_LIMIT_BURST_10M = int(os.getenv("HF_RATE_LIMIT_BURST_10M", "30"))
 RATE_LIMIT_STATE: Dict[str, deque] = defaultdict(deque)
 RATE_LOCK = Lock()
 CAPTCHA_TTL_SECONDS = int(os.getenv("HF_CAPTCHA_TTL_SECONDS", "600"))
+
+
+class ComplianceError(RuntimeError):
+    """Raised when a request would violate X API compliance guardrails."""
 
 def write_group_for_payload(handle: str) -> str:
     vm = psutil.virtual_memory().percent
@@ -395,40 +399,26 @@ def sanitize_handle(v: str) -> str:
 
 
 # ---- core scoring ----
-def _fetch_tweets_from_rss(handle: str, limit: int) -> List[str]:
-    # Public fallback for environments without X API credentials.
-    candidates = [
-        f"https://nitter.net/{handle}/rss",
-        f"https://nitter.poast.org/{handle}/rss",
-    ]
-    with httpx.Client(timeout=HF_REQUEST_TIMEOUT, follow_redirects=True) as client:
-        for url in candidates:
-            try:
-                r = client.get(url, headers={"User-Agent": "Mozilla/5.0"})
-                r.raise_for_status()
-                root = ET.fromstring(r.text)
-                out: List[str] = []
-                for item in root.findall('.//item'):
-                    desc = item.findtext('description') or ''
-                    txt = re.sub(r"<[^>]+>", " ", desc)
-                    txt = re.sub(r"\s+", " ", txt).strip()
-                    if txt:
-                        out.append(sanitize_text(txt, 340))
-                    if len(out) >= limit:
-                        break
-                if out:
-                    return out
-            except Exception:
-                continue
-    return []
+def _require_x_api_access() -> None:
+    if TWITTER_BEARER_TOKEN:
+        return
+    if X_COMPLIANCE_STRICT:
+        raise ComplianceError(
+            "X API token required. Set TWITTER_BEARER_TOKEN for compliant tweet access."
+        )
 
 
 def fetch_recent_tweets(handle: str, limit: int = 32) -> List[str]:
+    _require_x_api_access()
     if not TWITTER_BEARER_TOKEN:
-        return _fetch_tweets_from_rss(handle, min(max(limit, 5), 50))
+        return []
     headers = {"Authorization": f"Bearer {TWITTER_BEARER_TOKEN}"}
     with httpx.Client(timeout=HF_REQUEST_TIMEOUT) as client:
-        user = client.get(f"https://api.twitter.com/2/users/by/username/{handle}", headers=headers)
+        user = client.get(
+            f"https://api.twitter.com/2/users/by/username/{handle}",
+            headers=headers,
+            params={"user.fields": "id"},
+        )
         user.raise_for_status()
         uid = user.json().get("data", {}).get("id")
         if not uid:
@@ -436,7 +426,11 @@ def fetch_recent_tweets(handle: str, limit: int = 32) -> List[str]:
         tw = client.get(
             f"https://api.twitter.com/2/users/{uid}/tweets",
             headers=headers,
-            params={"max_results": min(max(limit, 5), 100), "exclude": "retweets,replies", "tweet.fields": "created_at"},
+            params={
+                "max_results": min(max(limit, 5), 100),
+                "exclude": "retweets,replies",
+                "tweet.fields": "created_at,lang",
+            },
         )
         tw.raise_for_status()
         rows = tw.json().get("data", [])
@@ -654,6 +648,42 @@ def quantum_rag_packet(handle: str, axes: Dict[str, float], colorwheel: Dict[str
         "ram_percent": ram,
     }
 
+
+def quantum_rag_packet(handle: str, axes: Dict[str, float], colorwheel: Dict[str, Any]) -> Dict[str, Any]:
+    seed = hashlib.sha256(f"{handle}|{axes}|{colorwheel.get('entropy_digest_short','')}".encode()).digest()
+    params = [((seed[i] / 255.0) * 3.14159) for i in range(8)]
+    dev = qml.device("default.qubit", wires=3)
+
+    @qml.qnode(dev)
+    def circuit(v):
+        qml.Hadamard(wires=0)
+        qml.RX(v[0], wires=0)
+        qml.RY(v[1], wires=1)
+        qml.RZ(v[2], wires=2)
+        qml.CNOT(wires=[0, 1])
+        qml.CRY(v[3], wires=[1, 2])
+        qml.IsingXX(v[4], wires=[0, 2])
+        qml.IsingYY(v[5], wires=[0, 1])
+        qml.IsingZZ(v[6], wires=[1, 2])
+        qml.PhaseShift(v[7], wires=0)
+        return qml.state()
+
+    st = circuit(params)
+    probs = [float(abs(a) ** 2) for a in st]
+    phase = [float(getattr(a, 'imag', 0.0)) for a in st]
+    top_idx = sorted(range(len(probs)), key=lambda i: probs[i], reverse=True)[:3]
+    top_states = [{"basis": format(i, '03b'), "prob": round(probs[i], 6)} for i in top_idx]
+
+    cpu = psutil.cpu_percent(interval=0.0)
+    ram = psutil.virtual_memory().percent
+    return {
+        "gate_sequence": ["H", "RX", "RY", "RZ", "CNOT", "CRY", "IsingXX", "IsingYY", "IsingZZ", "PhaseShift"],
+        "top_states": top_states,
+        "phase_signature": [round(x, 6) for x in phase[:4]],
+        "probs_entropy": round(float(-sum((p * (0.0 if p <= 1e-12 else math.log(p, 2))) for p in probs)), 6),
+        "cpu_percent": cpu,
+        "ram_percent": ram,
+    }
 
 def quantum_rag_packet(handle: str, axes: Dict[str, float], colorwheel: Dict[str, Any]) -> Dict[str, Any]:
     seed = hashlib.sha256(f"{handle}|{axes}|{colorwheel.get('entropy_digest_short','')}".encode()).digest()
@@ -1154,13 +1184,15 @@ def analyze():
         result = analyze_handle(handle, actor_type=actor_type)
         save_analysis(handle, result)
         return render_template_string(PAGE, csrf_token=csrf_token(), result=result, recent=recent_analyses(), error=None, handle_prefill=handle, captcha=issue_captcha())
+    except ComplianceError as exc:
+        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=sanitize_text(exc, 300), handle_prefill=request.form.get('handle', ''), captcha=issue_captcha())
     except Exception as exc:
         return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=sanitize_text(exc, 300), handle_prefill=request.form.get('handle', ''), captcha=issue_captcha())
 
 
 @app.get("/healthz")
 def healthz():
-    return {"ok": True, "db": os.path.exists(DB_PATH), "db_path": DB_PATH, "write_groups": WRITE_GROUPS, "model": HF_OPENAI_MODEL, "rate_limit_per_min": RATE_LIMIT_PER_MIN}
+    return {"ok": True, "db": os.path.exists(DB_PATH), "db_path": DB_PATH, "write_groups": WRITE_GROUPS, "model": HF_OPENAI_MODEL, "rate_limit_per_min": RATE_LIMIT_PER_MIN, "x_compliance_strict": X_COMPLIANCE_STRICT, "x_token_configured": bool(TWITTER_BEARER_TOKEN)}
 
 
 if __name__ == "__main__":
