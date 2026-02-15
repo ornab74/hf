@@ -1,40 +1,33 @@
-# HeartFlow Web App
+# HeartFlow Onefile Secure Trainer
 
-A Flask-based HeartFlow experience with advanced quantum-inspired scoring, long-horizon self-development outlooks, and a glassmorphism UI.
+This app now runs as a **single-file `main.py`** Flask application with inline UI/CSS/JS.
 
-## Features
+## Security additions
+- AES-GCM encrypted SQLite storage (`hf_secure.db`)
+- Boot-time key derivation from `ENCRYPTION_PASSPHRASE` + PBKDF2 salt
+- Extra entropy from `psutil` for key diversification
+- CSRF protection + hardened security headers
 
-- **Beautiful web UI** with a central “Find your Heartflow” glass card.
-- **Twitter handle analysis flow** (`@handle` input).
-- **Advanced HeartFlow scoring** across six axes with deterministic signal shaping.
-- **Quantum simulation layer** (coherence, entropy bits, entanglement bits, dominant modes, trajectory).
-- **Human improvement roadmaps** with 1-year, 5-year, and 10-year outlook cards.
-- **Trips to become a better human** with challenge-oriented growth prompts.
-- **CSRF protection** using per-session cryptographic tokens.
-- **SRI enabled** for Bootstrap CSS/JS CDN assets.
-- Security response headers (`X-Frame-Options`, `X-Content-Type-Options`, etc.).
+## Required env vars
+- `ENCRYPTION_PASSPHRASE` (**required**)
 
-## Setup
-
-```bash
-pip install -r requirements.txt
-```
-
-Set env variables:
-
-- `TWITTER_BEARER_TOKEN` (optional but recommended for live tweet fetch)
-- `FLASK_SECRET_KEY` (recommended in production)
-- `SESSION_COOKIE_SECURE=1` (recommended behind HTTPS)
+## Optional env vars
+- `ENCRYPTION_SALT_B64` (if absent, generated at boot for process env)
+- `ENCRYPTION_BOOT_NONCE_B64` (if absent, generated at boot for process env)
+- `OPENAI_API_KEY`, `HF_OPENAI_MODEL`, `HF_OPENAI_BASE_URL`
+- `TWITTER_BEARER_TOKEN` (optional; if unset, app falls back to public Nitter RSS for tweet pull)
+- `FLASK_SECRET_KEY`
 
 ## Run
-
 ```bash
 python main.py
 ```
 
-Then open: `http://localhost:5000`
+## Production
+```bash
+gunicorn main:app -b 0.0.0.0:${PORT:-3000} -w ${WEB_CONCURRENCY:-2} -k gthread --threads 4
+```
 
-## Quick checks
-
-- `GET /healthz` returns `{"ok": true}`.
-- POSTing to `/analyze` without valid CSRF token returns HTTP 400.
+## Persistent storage
+- Default encrypted DB path: `/var/data/hf_secure.db`
+- Override with `HF_DB_PATH` if needed
