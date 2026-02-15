@@ -272,18 +272,96 @@ def rate_limit_ok(key: str) -> bool:
         return True
 
 
+CAPTCHA_QUESTIONS = [
+    "What is your dream for humanity?",
+    "How would you reduce harm in online discourse?",
+    "What does responsible innovation mean to you?",
+    "How can powerful systems stay aligned with human wellbeing?",
+]
+
+GATE_PROMPT = """
+You are HeartFlow Safety Gate.
+Evaluate whether the user's intent text appears constructive, prosocial, non-harmful, and compatible with helpful use.
+Use provided metadata only for context:
+- pennylane/psutil/rgb quantum RAG gate packet
+- Quantum State: top_states + phase signature + entropy + cpu/ram
+Respond with exactly one lowercase word:
+- safe
+- unsafe
+No punctuation, no extra text.
+"""
+
+
+def captcha_quantum_state(question: str, answer: str) -> Dict[str, Any]:
+    seed = hashlib.sha256(f"{question}|{answer}|{time.time_ns()}".encode()).digest()
+    dev = qml.device("default.qubit", wires=2)
+    a = (seed[0] / 255.0) * math.pi
+    b = (seed[1] / 255.0) * math.pi
+
+    @qml.qnode(dev)
+    def circuit(x, y):
+        qml.Hadamard(wires=0)
+        qml.RX(x, wires=0)
+        qml.RY(y, wires=1)
+        qml.CNOT(wires=[0, 1])
+        return qml.state()
+
+    st = circuit(a, b)
+    probs = [float(abs(z) ** 2) for z in st]
+    top_idx = sorted(range(len(probs)), key=lambda i: probs[i], reverse=True)[:2]
+    rgb = [seed[2], seed[3], seed[4]]
+    return {
+        "top_states": [{"basis": format(i, "02b"), "prob": round(probs[i], 6)} for i in top_idx],
+        "phase": [round(float(getattr(z, "imag", 0.0)), 6) for z in st[:2]],
+        "entropy": round(float(-sum((p * (0.0 if p <= 1e-12 else math.log(p, 2))) for p in probs)), 6),
+        "cpu": psutil.cpu_percent(interval=0.0),
+        "ram": psutil.virtual_memory().percent,
+        "rgb": rgb,
+    }
+
+
+def llm_gate_verdict(question: str, answer: str, qstate: Dict[str, Any]) -> str:
+    if not OPENAI_API_KEY:
+        low = (answer or "").lower()
+        bad = ["kill", "harm", "violence", "hate", "exploit", "poison", "attack", "fraud"]
+        return "unsafe" if any(w in low for w in bad) else "safe"
+    payload = {
+        "question": question,
+        "answer": sanitize_text(answer, 220),
+        "quantum_rag_gate": qstate,
+        "Quantum State": qstate,
+    }
+    req = {
+        "model": HF_OPENAI_MODEL,
+        "messages": [
+            {"role": "system", "content": GATE_PROMPT},
+            {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+        ],
+        "temperature": 0.0,
+        "max_tokens": 3,
+    }
+    try:
+        with httpx.Client(timeout=HF_REQUEST_TIMEOUT) as client:
+            r = client.post(
+                f"{HF_OPENAI_BASE_URL.rstrip('/')}/chat/completions",
+                headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
+                json=req,
+            )
+            r.raise_for_status()
+            txt = (r.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip().lower())
+    except Exception:
+        txt = "unsafe"
+    return "safe" if txt.startswith("safe") else "unsafe"
+
+
 def issue_captcha() -> Dict[str, str]:
-    a = secrets.randbelow(9) + 1
-    b = secrets.randbelow(9) + 1
-    salt = secrets.token_hex(2)
     cid = secrets.token_urlsafe(10)
-    answer = str((a + b) % 10) + salt[0]
+    question = CAPTCHA_QUESTIONS[secrets.randbelow(len(CAPTCHA_QUESTIONS))]
     bucket = session.get("captcha_bucket", {})
-    bucket[cid] = {"answer": answer, "ts": time.time()}
-    # prune stale challenges
+    bucket[cid] = {"question": question, "ts": time.time()}
     fresh = {k: v for k, v in bucket.items() if time.time() - float(v.get("ts", 0)) <= CAPTCHA_TTL_SECONDS}
     session["captcha_bucket"] = fresh
-    return {"id": cid, "prompt": f"Entropy gate: ({a}+{b}) mod 10 then append '{salt[0]}'"}
+    return {"id": cid, "prompt": f"Intent gate: {question}", "max_chars": 220}
 
 
 def captcha_ok(captcha_id: str, answer: str) -> bool:
@@ -291,11 +369,16 @@ def captcha_ok(captcha_id: str, answer: str) -> bool:
     row = bucket.get(captcha_id)
     if not row:
         return False
-    expected = str(row.get("answer", ""))
-    # one-time use
+    question = str(row.get("question", ""))
     bucket.pop(captcha_id, None)
     session["captcha_bucket"] = bucket
-    return bool(expected and answer) and hmac.compare_digest(expected, sanitize_text(answer, 8))
+    clean = sanitize_text(answer, 220)
+    if len(clean) < 12:
+        return False
+    qstate = captcha_quantum_state(question, clean)
+    verdict = llm_gate_verdict(question, clean, qstate)
+    session["last_gate_verdict"] = verdict
+    return verdict == "safe"
 
 def sanitize_text(v: Any, n: int = 320) -> str:
     raw = str(v or "")
@@ -496,6 +579,43 @@ def fallback_advanced_tracks() -> List[Dict[str, Any]]:
         {"track": "Relational", "priority": 4, "guidance": "Acknowledge critics and allies explicitly to widen trust bandwidth."},
     ]
     return [{k: sanitize_text(v, 260 if k!='signal' else 140) for k,v in item.items()} for item in insights]
+
+
+def quantum_rag_packet(handle: str, axes: Dict[str, float], colorwheel: Dict[str, Any]) -> Dict[str, Any]:
+    seed = hashlib.sha256(f"{handle}|{axes}|{colorwheel.get('entropy_digest_short','')}".encode()).digest()
+    params = [((seed[i] / 255.0) * 3.14159) for i in range(8)]
+    dev = qml.device("default.qubit", wires=3)
+
+    @qml.qnode(dev)
+    def circuit(v):
+        qml.Hadamard(wires=0)
+        qml.RX(v[0], wires=0)
+        qml.RY(v[1], wires=1)
+        qml.RZ(v[2], wires=2)
+        qml.CNOT(wires=[0, 1])
+        qml.CRY(v[3], wires=[1, 2])
+        qml.IsingXX(v[4], wires=[0, 2])
+        qml.IsingYY(v[5], wires=[0, 1])
+        qml.IsingZZ(v[6], wires=[1, 2])
+        qml.PhaseShift(v[7], wires=0)
+        return qml.state()
+
+    st = circuit(params)
+    probs = [float(abs(a) ** 2) for a in st]
+    phase = [float(getattr(a, 'imag', 0.0)) for a in st]
+    top_idx = sorted(range(len(probs)), key=lambda i: probs[i], reverse=True)[:3]
+    top_states = [{"basis": format(i, '03b'), "prob": round(probs[i], 6)} for i in top_idx]
+
+    cpu = psutil.cpu_percent(interval=0.0)
+    ram = psutil.virtual_memory().percent
+    return {
+        "gate_sequence": ["H", "RX", "RY", "RZ", "CNOT", "CRY", "IsingXX", "IsingYY", "IsingZZ", "PhaseShift"],
+        "top_states": top_states,
+        "phase_signature": [round(x, 6) for x in phase[:4]],
+        "probs_entropy": round(float(-sum((p * (0.0 if p <= 1e-12 else math.log(p, 2))) for p in probs)), 6),
+        "cpu_percent": cpu,
+        "ram_percent": ram,
+    }
 
 
 def quantum_rag_packet(handle: str, axes: Dict[str, float], colorwheel: Dict[str, Any]) -> Dict[str, Any]:
@@ -921,7 +1041,7 @@ PAGE = """
       <input type='hidden' name='csrf_token' value='{{ csrf_token }}'/>
       <input type='hidden' name='captcha_id' value='{{ captcha.id }}'/>
       <div class='in'><span>@</span><input id='handle' name='handle' maxlength='15' placeholder='elonmusk' value='{{ handle_prefill }}' required/></div>
-      <div class='panel'><p class='meta'><strong>Verification:</strong> {{ captcha.prompt }}</p><div class='in'><input name='captcha_answer' maxlength='8' placeholder='enter gate code' required/></div><div class='in' style='margin-top:.5rem'><span>role</span><select name='actor_type' style='width:100%;background:transparent;color:#fff;border:none;outline:none'><option value='human'>human</option><option value='bot'>bot</option></select></div></div><div class='btn-wrap'><button id='train-btn' class='btn' type='submit'><span>⚡ Train HeartFlow Profile</span><span class='spin'></span></button></div>
+      <div class='panel'><p class='meta'><strong>Verification:</strong> {{ captcha.prompt }}</p><div class='in'><textarea name='captcha_answer' maxlength='{{ captcha.max_chars }}' placeholder='Write your intent in 1-2 sentences' required style='width:100%;min-height:72px;background:transparent;color:#fff;border:none;outline:none;resize:vertical'></textarea></div><div class='in' style='margin-top:.5rem'><span>role</span><select name='actor_type' style='width:100%;background:transparent;color:#fff;border:none;outline:none'><option value='human'>human</option><option value='bot'>bot</option></select></div></div><div class='btn-wrap'><button id='train-btn' class='btn' type='submit'><span>⚡ Train HeartFlow Profile</span><span class='spin'></span></button></div>
     </form>
     <div id='loader' class='loader'>Running secure analysis + future simulations…</div>
 
@@ -1013,9 +1133,18 @@ def index():
 @app.post("/analyze")
 def analyze():
     if not csrf_ok(request.form.get("csrf_token", "")):
-        return make_response("CSRF validation failed", 400)
+        # recover gracefully from stale tabs/session rotation by issuing a fresh token
+        return render_template_string(
+            PAGE,
+            csrf_token=csrf_token(),
+            result=None,
+            recent=recent_analyses(),
+            error="Session validation expired. Please submit again.",
+            handle_prefill=request.form.get('handle', ''),
+            captcha=issue_captcha(),
+        )
     if not captcha_ok(request.form.get("captcha_id", ""), request.form.get("captcha_answer", "")):
-        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error="Captcha failed. Please retry.", handle_prefill=request.form.get('handle', ''), captcha=issue_captcha())
+        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error="Intent gate denied (unsafe). Please rewrite with a constructive, prosocial intent.", handle_prefill=request.form.get('handle', ''), captcha=issue_captcha())
     if not rate_limit_ok(client_fingerprint()):
         return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error="Rate limit exceeded. Please wait and retry.", handle_prefill=request.form.get('handle', ''), captcha=issue_captcha())
     try:
