@@ -11,3 +11,4 @@ pennylane==0.38.0
 openai==2.20.0
 cryptography==44.0.1
 psutil==7.0.0
+markdown==3.7

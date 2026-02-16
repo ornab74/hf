@@ -3,6 +3,7 @@
 This app now runs as a **single-file `main.py`** Flask application with inline UI/CSS/JS.
 
 ## Security additions
+- About and Creators pages with markdown + MathJax equation rendering
 - AES-GCM encrypted SQLite storage (`hf_secure.db`)
 - Boot-time key derivation from `ENCRYPTION_PASSPHRASE` + PBKDF2 salt
 - Extra entropy from `psutil` for key diversification
@@ -38,3 +39,9 @@ gunicorn main:app -b 0.0.0.0:${PORT:-3000} -w ${WEB_CONCURRENCY:-2} -k gthread -
 - The app only pulls tweets from official X API v2 endpoints.
 - In strict mode (`X_COMPLIANCE_STRICT=1`), analyze requests are rejected unless `TWITTER_BEARER_TOKEN` is set.
 - No scraping or third-party mirrors are used in compliant mode.
+
+
+## Pages
+- `/` Home analyzer dashboard
+- `/about` markdown + equations
+- `/creators` markdown + equations
