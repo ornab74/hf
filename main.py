@@ -277,6 +277,11 @@ def rate_limit_ok(key: str) -> bool:
         q.append(now)
         return True
 
+def sanitize_handle(v: str) -> str:
+    h = (v or "").strip().lstrip("@").strip()
+    if not HANDLE_RE.match(h):
+        raise ValueError("Handle must be 1-15 chars of letters, numbers, underscore.")
+    return h
 
 CAPTCHA_QUESTIONS = [
     "What is your dream for humanity?",
@@ -589,6 +594,196 @@ def fallback_advanced_tracks() -> List[Dict[str, Any]]:
         {"track": "Strategic", "priority": 5, "guidance": "Publish a 3-part narrative arc: thesis, risk, and execution proof."},
         {"track": "Relational", "priority": 4, "guidance": "Acknowledge critics and allies explicitly to widen trust bandwidth."},
     ]
+    return [{k: sanitize_text(v, 260 if k!='signal' else 140) for k,v in item.items()} for item in insights]
+
+
+def quantum_rag_packet(handle: str, axes: Dict[str, float], colorwheel: Dict[str, Any]) -> Dict[str, Any]:
+    seed = hashlib.sha256(f"{handle}|{axes}|{colorwheel.get('entropy_digest_short','')}".encode()).digest()
+    params = [((seed[i] / 255.0) * 3.14159) for i in range(8)]
+    dev = qml.device("default.qubit", wires=3)
+
+    @qml.qnode(dev)
+    def circuit(v):
+        qml.Hadamard(wires=0)
+        qml.RX(v[0], wires=0)
+        qml.RY(v[1], wires=1)
+        qml.RZ(v[2], wires=2)
+        qml.CNOT(wires=[0, 1])
+        qml.CRY(v[3], wires=[1, 2])
+        qml.IsingXX(v[4], wires=[0, 2])
+        qml.IsingYY(v[5], wires=[0, 1])
+        qml.IsingZZ(v[6], wires=[1, 2])
+        qml.PhaseShift(v[7], wires=0)
+        return qml.state()
+
+    st = circuit(params)
+    probs = [float(abs(a) ** 2) for a in st]
+    phase = [float(getattr(a, 'imag', 0.0)) for a in st]
+    top_idx = sorted(range(len(probs)), key=lambda i: probs[i], reverse=True)[:3]
+    top_states = [{"basis": format(i, '03b'), "prob": round(probs[i], 6)} for i in top_idx]
+
+    cpu = psutil.cpu_percent(interval=0.0)
+    ram = psutil.virtual_memory().percent
+    return {
+        "gate_sequence": ["H", "RX", "RY", "RZ", "CNOT", "CRY", "IsingXX", "IsingYY", "IsingZZ", "PhaseShift"],
+        "top_states": top_states,
+        "phase_signature": [round(x, 6) for x in phase[:4]],
+        "probs_entropy": round(float(-sum((p * (0.0 if p <= 1e-12 else math.log(p, 2))) for p in probs)), 6),
+        "cpu_percent": cpu,
+        "ram_percent": ram,
+    }
+
+
+def quantum_rag_packet(handle: str, axes: Dict[str, float], colorwheel: Dict[str, Any]) -> Dict[str, Any]:
+    seed = hashlib.sha256(f"{handle}|{axes}|{colorwheel.get('entropy_digest_short','')}".encode()).digest()
+    params = [((seed[i] / 255.0) * 3.14159) for i in range(8)]
+    dev = qml.device("default.qubit", wires=3)
+
+    @qml.qnode(dev)
+    def circuit(v):
+        qml.Hadamard(wires=0)
+        qml.RX(v[0], wires=0)
+        qml.RY(v[1], wires=1)
+        qml.RZ(v[2], wires=2)
+        qml.CNOT(wires=[0, 1])
+        qml.CRY(v[3], wires=[1, 2])
+        qml.IsingXX(v[4], wires=[0, 2])
+        qml.IsingYY(v[5], wires=[0, 1])
+        qml.IsingZZ(v[6], wires=[1, 2])
+        qml.PhaseShift(v[7], wires=0)
+        return qml.state()
+
+    st = circuit(params)
+    probs = [float(abs(a) ** 2) for a in st]
+    phase = [float(getattr(a, 'imag', 0.0)) for a in st]
+    top_idx = sorted(range(len(probs)), key=lambda i: probs[i], reverse=True)[:3]
+    top_states = [{"basis": format(i, '03b'), "prob": round(probs[i], 6)} for i in top_idx]
+
+    cpu = psutil.cpu_percent(interval=0.0)
+    ram = psutil.virtual_memory().percent
+    return {
+        "gate_sequence": ["H", "RX", "RY", "RZ", "CNOT", "CRY", "IsingXX", "IsingYY", "IsingZZ", "PhaseShift"],
+        "top_states": top_states,
+        "phase_signature": [round(x, 6) for x in phase[:4]],
+        "probs_entropy": round(float(-sum((p * (0.0 if p <= 1e-12 else math.log(p, 2))) for p in probs)), 6),
+        "cpu_percent": cpu,
+        "ram_percent": ram,
+    }
+
+
+def quantum_rag_packet(handle: str, axes: Dict[str, float], colorwheel: Dict[str, Any]) -> Dict[str, Any]:
+    seed = hashlib.sha256(f"{handle}|{axes}|{colorwheel.get('entropy_digest_short','')}".encode()).digest()
+    params = [((seed[i] / 255.0) * 3.14159) for i in range(8)]
+    dev = qml.device("default.qubit", wires=3)
+
+    @qml.qnode(dev)
+    def circuit(v):
+        qml.Hadamard(wires=0)
+        qml.RX(v[0], wires=0)
+        qml.RY(v[1], wires=1)
+        qml.RZ(v[2], wires=2)
+        qml.CNOT(wires=[0, 1])
+        qml.CRY(v[3], wires=[1, 2])
+        qml.IsingXX(v[4], wires=[0, 2])
+        qml.IsingYY(v[5], wires=[0, 1])
+        qml.IsingZZ(v[6], wires=[1, 2])
+        qml.PhaseShift(v[7], wires=0)
+        return qml.state()
+
+    st = circuit(params)
+    probs = [float(abs(a) ** 2) for a in st]
+    phase = [float(getattr(a, 'imag', 0.0)) for a in st]
+    top_idx = sorted(range(len(probs)), key=lambda i: probs[i], reverse=True)[:3]
+    top_states = [{"basis": format(i, '03b'), "prob": round(probs[i], 6)} for i in top_idx]
+
+    cpu = psutil.cpu_percent(interval=0.0)
+    ram = psutil.virtual_memory().percent
+    return {
+        "gate_sequence": ["H", "RX", "RY", "RZ", "CNOT", "CRY", "IsingXX", "IsingYY", "IsingZZ", "PhaseShift"],
+        "top_states": top_states,
+        "phase_signature": [round(x, 6) for x in phase[:4]],
+        "probs_entropy": round(float(-sum((p * (0.0 if p <= 1e-12 else math.log(p, 2))) for p in probs)), 6),
+        "cpu_percent": cpu,
+        "ram_percent": ram,
+    }
+
+def quantum_rag_packet(handle: str, axes: Dict[str, float], colorwheel: Dict[str, Any]) -> Dict[str, Any]:
+    seed = hashlib.sha256(f"{handle}|{axes}|{colorwheel.get('entropy_digest_short','')}".encode()).digest()
+    params = [((seed[i] / 255.0) * 3.14159) for i in range(8)]
+    dev = qml.device("default.qubit", wires=3)
+
+    @qml.qnode(dev)
+    def circuit(v):
+        qml.Hadamard(wires=0)
+        qml.RX(v[0], wires=0)
+        qml.RY(v[1], wires=1)
+        qml.RZ(v[2], wires=2)
+        qml.CNOT(wires=[0, 1])
+        qml.CRY(v[3], wires=[1, 2])
+        qml.IsingXX(v[4], wires=[0, 2])
+        qml.IsingYY(v[5], wires=[0, 1])
+        qml.IsingZZ(v[6], wires=[1, 2])
+        qml.PhaseShift(v[7], wires=0)
+        return qml.state()
+
+    st = circuit(params)
+    probs = [float(abs(a) ** 2) for a in st]
+    phase = [float(getattr(a, 'imag', 0.0)) for a in st]
+    top_idx = sorted(range(len(probs)), key=lambda i: probs[i], reverse=True)[:3]
+    top_states = [{"basis": format(i, '03b'), "prob": round(probs[i], 6)} for i in top_idx]
+
+    cpu = psutil.cpu_percent(interval=0.0)
+    ram = psutil.virtual_memory().percent
+    return {
+        "gate_sequence": ["H", "RX", "RY", "RZ", "CNOT", "CRY", "IsingXX", "IsingYY", "IsingZZ", "PhaseShift"],
+        "top_states": top_states,
+        "phase_signature": [round(x, 6) for x in phase[:4]],
+        "probs_entropy": round(float(-sum((p * (0.0 if p <= 1e-12 else math.log(p, 2))) for p in probs)), 6),
+        "cpu_percent": cpu,
+        "ram_percent": ram,
+    }
+
+
+def deterministic_date_vector(axes: Dict[str, float], quantum_rag: Dict[str, Any]) -> List[Dict[str, Any]]:
+    now = datetime.now(timezone.utc).date()
+    cpu_bias = int(quantum_rag.get("cpu_percent", 0) // 10)
+    ram_bias = int(quantum_rag.get("ram_percent", 0) // 15)
+    score = int(sum(axes.values()) * 10)
+    offsets = [21 + cpu_bias, 55 + ram_bias, 89 + score % 17, 144 + (cpu_bias + ram_bias)]
+    dirs = ["double_down", "stabilize", "pivot", "recover"]
+    out = []
+    for i, off in enumerate(offsets):
+        d = now + timedelta(days=off)
+        out.append({
+            "date": d.isoformat(),
+            "importance": sanitize_text("High-leverage execution window inferred from quantum-state concentration and system load profile.", 220),
+            "direction": dirs[i % len(dirs)],
+            "confidence": clamp(0.55 + (0.08 * i)),
+        })
+    return out
+
+
+def build_dynamic_prompt_layers(handle: str, axes: Dict[str, float], quantum_rag: Dict[str, Any]) -> Dict[str, Any]:
+    now = datetime.now(timezone.utc)
+    entropy_tag = hashlib.sha256(f"{handle}|{now.isoformat()}|{axes}|{quantum_rag.get('top_states', [])}".encode()).hexdigest()[:20]
+    cpu = quantum_rag.get("cpu_percent", 0.0)
+    ram = quantum_rag.get("ram_percent", 0.0)
+    load_band = "high" if (cpu + ram) / 2.0 > 70 else "medium" if (cpu + ram) / 2.0 > 45 else "low"
+    return {
+        "entropy_tag": entropy_tag,
+        "utc_epoch": int(now.timestamp()),
+        "load_band": load_band,
+        "axis_gradient": {k: round(v, 4) for k, v in axes.items()},
+        "style_layer": f"qrag-{load_band}-{entropy_tag[:8]}",
+    }
+
+
+def _risk_band(v: float, low: float, high: float) -> str:
+    if v >= high:
+        return "high"
+    if v >= low:
+        return "medium"
+    return "low"
 
 
 def quantum_rag_packet(handle: str, axes: Dict[str, float], colorwheel: Dict[str, Any]) -> Dict[str, Any]:
