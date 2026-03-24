@@ -8,3 +8,4 @@ gunicorn==25.0.3
 cryptography==46.0.5
 psutil==7.0.0
 markdown==3.7
+autoray==0.7.2
