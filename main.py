@@ -1309,6 +1309,10 @@ def seo_meta(page_kind: str) -> Dict[str, str]:
             "title": "Creators | Heartflow",
             "description": "Heartflow creators and collaboration notes for people extending the app, its scoring pipeline, and its visualization layers.",
         },
+        "story": {
+            "title": "Story | Heartflow",
+            "description": "A long-form Heartflow story about an Economoia surfacing system that rewards kindness, intelligence, and innovation in the robotic age.",
+        },
         "dashboard": {
             "title": "Heartflow Dashboard",
             "description": "Heartflow dashboard for structured HF analysis, quantum-RAG outputs, and simulation-driven coaching.",
@@ -1428,6 +1432,219 @@ $$
 """
 
 
+STORY_MD = r"""
+# Story: Heartflow and the Economoia Surface
+
+Heartflow begins as a console, but it wants to become something larger than a console. It wants to become a surface. Not a screen in the narrow sense, but a living interface where human intention, machine interpretation, and social consequence can meet without collapsing into noise. In this story, Heartflow becomes an Economoia surfacing system: a way of revealing hidden value, hidden need, and hidden capability so that the distance between poverty and intelligence can be narrowed by design rather than by luck.
+
+That phrase, Economoia surfacing system, names a simple but ambitious idea. Economoia is the visible economy of attention, labor, trust, learning, and opportunity. It is the part of the world that people actually live inside when they are trying to get a job, learn a skill, keep their family safe, and make a future that does not crush them on contact. Surfacing means making what is buried legible. If a person has intelligence but no channel, the world treats them as absent. If a person has kindness but no platform, the world treats them as weak. If a person has an idea but no capital, no mentor, no time, no stability, the idea becomes a ghost. Heartflow wants to surface the signals that otherwise vanish.
+
+In an age of robotics and automated systems, the old equation is no longer enough. We used to ask whether a machine could replace labor. The more urgent question is whether a machine can reward the human qualities that make civilization worth sustaining. Can it reward kindness? Can it reward innovation? Can it reward persistence without punishing fragility? Can it help intelligence move from a private advantage into a public good? Heartflow answers yes only if the machine is designed to look for what people usually miss.
+
+The first principle is that intelligence is not a single ladder. It is distributed. It appears in formal education, yes, but also in street sense, caregiving, repair work, translation, improvisation, memory, and the ability to survive under pressure without becoming cruel. Poverty often hides intelligence because it consumes the time, stability, and safety needed for intelligence to be recognized. A person who is always interrupted can look unprepared. A person who is always exhausted can look unmotivated. A person carrying three jobs can look uncreative. Heartflow’s deeper story is to reverse that mistake. It asks what happens when a system is built to detect capacity under constraint rather than status under polish.
+
+One way to describe the system is through a simple relation:
+
+$$
+V = \alpha K + \beta I + \gamma C + \delta T
+$$
+
+where $V$ is visible value, $K$ is kindness, $I$ is intelligence, $C$ is creativity, and $T$ is trust. The coefficients are not fixed by physics; they are set by culture. A cruel economy chooses $\alpha$ for capital and suppresses the rest. A humane economy raises $\beta$, $\gamma$, and $\delta$, because it knows that intelligence without trust remains isolated, creativity without kindness becomes predatory, and kindness without visibility is easy to exploit. Heartflow is interested in changing those coefficients.
+
+That change cannot happen only through speeches. It has to happen through interfaces, scoring systems, recommendation layers, and the invisible politics of what gets surfaced. If a platform only rewards speed, it creates speed worship. If it only rewards novelty, it creates novelty addiction. If it only rewards growth, it creates extraction. Heartflow imagines a different reward function:
+
+$$
+R = f(K, I, N, S, P)
+$$
+
+where $R$ is reward, $K$ is kindness, $I$ is intelligence, $N$ is novelty, $S$ is stewardship, and $P$ is practical usefulness. The point is not to eliminate performance. The point is to widen performance so that being helpful is not treated as separate from being smart. In the robotic age, that distinction will matter more every year. We will have abundant computation and scarce wisdom unless systems are trained to prefer humane coordination over cold optimization.
+
+Heartflow’s role as an Economoia surfacing system is therefore twofold. First, it interprets signals: public language, patterns of care, indicators of scale, expressions of risk, and traces of creative momentum. Second, it turns those interpretations into actionable surfaces: a report, a diagram, a risk outlook, a life optimization structure, a story of next steps. That may sound modest, but modest interfaces can become powerful institutions when they are repeated at scale. A good surfaced insight can redirect a week. A good explanation can save a relationship. A good signal can unlock a chance that poverty had hidden.
+
+There is a moral danger here, and the story has to face it directly. Any system that surfaces value can also decide who gets ignored. If the system is shallow, it will only amplify confidence. If it is lazy, it will confuse loudness with leadership. If it is biased, it will call privilege “merit.” So Heartflow must be built with a discipline of humility. It must be willing to say:
+
+$$
+\text{Signal} \neq \text{Truth}
+$$
+
+and also:
+
+$$
+\text{Prediction} \neq \text{Destiny}
+$$
+
+Those equations matter because the future is not a verdict. It is a negotiation. In the robotic age, the most important systems will not merely classify people; they will influence how people classify themselves. That is why the story of Heartflow is not about building a perfect judge. It is about building a better mirror, one that does not only reflect prestige, but also persistence; not only output, but recovery; not only status, but generosity.
+
+In practice, rewarding kindness means noticing that kindness is infrastructural. It keeps teams from splitting. It keeps families from fraying. It keeps communities from turning every disagreement into a collapse. Rewarding innovation means noticing that innovation is not only invention; it is adaptation under constraint. A person who invents a workaround for a broken school bus route, a broken payment system, or a broken supply chain is innovating just as much as someone who writes elegant code. Heartflow’s future lies in recognizing that innovation often lives near necessity, not luxury.
+
+What would an Economoia surfacing system look like if it were broadly adopted? It would surface hidden learners and hidden builders. It would reveal who is ready for training, who is ready for mentorship, who is ready for a second chance, and who is one connection away from compounding their ability. It would reward people who create trust, not just attention. It would make the quiet but capable visible. It would make the generous strategically valuable. It would make intelligence less extractive by tying it to contribution.
+
+The robotic age will keep asking humans to justify their place. Heartflow answers that the place of the human is not a fallback role. It is the source of the values that determine whether automation liberates or degrades. If we let machines optimize only for margin, we will get a narrower world. If we teach them to surface kindness, intelligence, and innovation together, we can widen the world instead.
+
+This is why Heartflow’s future story is bigger than analytics. It is a story about coordination. Coordination between people who have knowledge and people who have need. Between systems that can compute and systems that can care. Between invisible labor and visible opportunity. Between the present and the futures we are willing to build.
+
+There is a final equation, not because life is reducible to math, but because math can help us name a direction:
+
+$$
+\text{Justice} \approx \text{Access} \times \text{Recognition} \times \text{Repair}
+$$
+
+Access opens the door. Recognition tells the world what it is seeing. Repair makes the system capable of learning when it was wrong. Heartflow hopes to contribute to all three. It is not trying to replace poverty with glamour. It is trying to replace exclusion with legibility, and legibility with opportunity. It wants to become a quiet but durable surface where the best in people can be found, rewarded, and scaled.
+
+If the story succeeds, Heartflow will not be remembered only as software. It will be remembered as a mechanism for social attention that helped a few hidden minds become visible, helped a few quiet innovators become funded, helped a few acts of kindness become economically meaningful, and helped the robotic age become slightly more human than it otherwise would have been.
+
+Yet the story is not only about a product. It is about a theory of civilization. Every era has a dominant interface between human effort and social reward. In one era, it was land. In another, it was factories. Then it was networked attention. In the next era, it may be systems that can detect not only what a person produced, but what a person protected, repaired, connected, or imagined under pressure. Heartflow belongs to that next era because it is trying to build a reward surface for the things that make a society durable.
+
+The old world often treated poverty as a private failure. It asked people to demonstrate worth after the very conditions that would have made worth visible were already stripped away. That logic was backwards. Poverty is not merely the absence of money; it is often the absence of slack, of time, of safety, of access, of translation, of a person who believes you, of a structure that can hold your work long enough for it to mature. If intelligence needs oxygen, poverty can feel like a slow suffocation. Heartflow exists to say that hidden intelligence is still intelligence. It still matters. It should still count.
+
+That is why the word surfacing matters so much. Surfacing is not extraction. It is not a machine taking value from a person and calling it insight. Surfacing is closer to noticing a lighthouse in fog. It is the act of making something already present become visible enough to navigate by. A surfacing system does not manufacture human dignity; it detects it, protects it, and gives it coordinates. In this way, Heartflow is not trying to replace human judgment. It is trying to improve the conditions under which human judgment becomes fair.
+
+The robotic age intensifies this problem. Robots and autonomous systems are excellent at execution, but execution is not the same as wisdom. A machine can optimize throughput and still destroy trust. It can minimize cost and still maximize harm. It can remove friction and accidentally remove care. So the question is not whether the robotic age will arrive. It already has. The question is whether the systems around robots will reward the things robots cannot originate on their own: kindness, ethical imagination, social repair, and the ability to recognize when scale has started to eat meaning.
+
+Heartflow imagines an answer that is deceptively simple. It says that systems should learn to reward the full ecology of human excellence. That includes technical skill, yes, but also patience, rescue, pedagogy, bedside care, community memory, and the humility to ask for help before collapse. If innovation is only counted when it looks glamorous, then the quiet innovators disappear. If intelligence is only counted when it is certified, then the self-taught are excluded. If kindness is only counted when it is convenient, then the people who carried others through hard seasons are erased. Heartflow wants to change the accounting.
+
+That change can be written as an expanded equation:
+
+$$
+\mathrm{Economoia} = \frac{(A + R + L + M) \cdot (K + I + C)}{F + E + B}
+$$
+
+where $A$ is access, $R$ is recognition, $L$ is legitimacy, $M$ is mobility, $K$ is kindness, $I$ is intelligence, $C$ is creativity, $F$ is friction, $E$ is exclusion, and $B$ is burnout. This is not a literal model of the world. It is a moral diagram. It says that value rises when access, recognition, legitimacy, and mobility are supported by kindness, intelligence, and creativity, and it falls when friction, exclusion, and burnout are allowed to dominate the field.
+
+The point of a diagram like this is not to make life simple. It is to make life legible. Legibility is often the first form of justice. A person cannot receive what the system cannot see. A team cannot support what it cannot name. A city cannot repair what it does not measure. So Heartflow treats legibility as a civic act. It wants to turn opaque lives into visible pathways without reducing those lives to numbers alone. That is the tightrope: enough structure to guide, enough humility to avoid pretending the structure is the soul of the person.
+
+The practical side of this story matters too. A surfacing system must not only be poetic; it must be operational. It should help a mentor identify a mentee’s strengths. It should help an employer distinguish between polish and potential. It should help a community notice who is carrying burden quietly. It should help funders see where a small investment could create a large change. It should help schools recognize that some forms of brilliance arrive with interruptions, and that interruption does not cancel brilliance. It should help families, nonprofits, cooperatives, and public institutions make choices that feel less like guesswork and more like stewardship.
+
+Here is another equation, one that expresses the social side of the promise:
+
+$$
+\mathrm{Opportunity} = \mathrm{Signal} \times \mathrm{Trust} \times \mathrm{Timing}
+$$
+
+If any one factor is zero, the product collapses. A strong signal with no trust gets ignored. Trust without timing misses the opening. Timing without signal becomes luck. Heartflow’s value is in helping all three arrive at once. It cannot create opportunity from nothing, but it can reduce the probability that opportunity remains invisible long enough to die.
+
+This is where kindness becomes more than a virtue and starts to become infrastructure. In fragile systems, kindness is often dismissed as soft. In reality, kindness is load-bearing. It is the thing that keeps collaboration from cracking when pressure rises. It is the thing that makes people tell the truth earlier. It is the thing that allows repair to happen before damage becomes identity. In the robotic age, the temptation will be to overvalue speed because speed is measurable. Heartflow’s counterargument is that kindness reduces hidden costs, and hidden costs are the ones that eventually bankrupt societies.
+
+Innovation, similarly, must be redefined. Too often innovation is treated as novelty for its own sake. Heartflow rejects that narrowness. Real innovation is not just invention; it is the creation of new pathways for human flourishing. A new algorithm that makes a rich person richer is not necessarily innovation in the civic sense. A new workflow that lets a caregiver rest, a student learn, or a small business survive a supply shock may be far more transformative. Heartflow wants to reward innovation that reduces suffering, expands agency, and creates compounding benefits over time.
+
+The moral center of this story is the belief that intelligence and poverty should not be treated as opposites. Intelligence can exist inside poverty. In fact, it often does. But poverty can hide intelligence behind exhaustion, instability, mistrust, and administrative burden. A person who is constantly in survival mode spends less energy on experimentation, which means the system misreads them as less inventive than they are. Heartflow tries to compensate for that misreading by surfacing patterns that suggest latent capacity. It is an argument for recognizing the unfinished person, not just the already-polished one.
+
+This matters especially in a world of automated sorting. Machine systems increasingly decide who gets seen, who gets hired, who gets funds, who gets recommended, and who gets left behind. If those systems are built without care, they can freeze old inequalities into new interfaces. A hidden class system can become an automated class system. Heartflow’s ambition is to do the opposite: to become a system that can detect the possibility of upward motion before the world has already granted permission. That means looking for resilience, not just pedigree; consistency, not just charisma; repair, not just performance.
+
+There is also a deeper spiritual dimension to the story, even if it is not framed as religion. People want their work to mean something. They want to feel that the hours they spend surviving can eventually become the hours they spend building. They want to know that their tenderness is not a liability, that their ideas are not imaginary, that their background does not make them permanently late to the future. Heartflow imagines a world where the interface answers that desire with evidence. It says: yes, your signal is real. Yes, your effort has pattern. Yes, your capacity is larger than the system assumed.
+
+In that sense, the Economoia surface is a kind of social telescope. It does not eliminate distance, but it changes what can be seen across the distance. It helps the world notice who is ready to grow, who is ready to lead, who is ready to teach, and who is ready to be given a chance that was previously invisible. This is not charity. It is a correction. It is a move toward a more accurate civilization.
+
+The mathematics of that correction can be imagined as a feedback loop:
+
+$$
+S_{t+1} = S_t + \eta \cdot (U_t - D_t)
+$$
+
+where $S_t$ is social surface quality at time $t$, $\eta$ is learning rate, $U_t$ is the amount of useful recognition generated, and $D_t$ is the amount of distortion produced by bias, opacity, or neglect. If the surface learns too slowly, it becomes stagnant. If it learns too quickly, it becomes unstable. So Heartflow must learn at the pace of trust: fast enough to matter, slow enough to remain accountable.
+
+This is also why the story has to stay human. People are not optimization targets. They are living centers of interpretation, care, memory, and refusal. A system that tries to flatten them into a score is not a surfacing system; it is a truncation machine. Heartflow therefore aims to preserve nuance. It should be able to say that someone has strong creative momentum and fragile stability. It should be able to say that someone has high courage and high risk. It should be able to say that someone is likely brilliant but currently overloaded. It should be able to say, gently but clearly, that a person is not broken, only burdened.
+
+That language matters because labels shape pathways. When a system names a person as a problem, the person is often forced into defensive postures. When a system names a person as potential, a different future becomes thinkable. Heartflow wants to be a machine for thinkable futures. It wants to preserve rigor without losing mercy. It wants to show that data can be used not just to classify people, but to widen the range of futures they are allowed to inhabit.
+
+The long-term dream is that this becomes contagious. Once one organization learns to reward kindness and innovation together, others may follow. Once one city learns to surface hidden talent more fairly, others may adapt. Once one platform learns that compassion is a form of infrastructure, the cultural baseline moves. This is how institutions evolve: not always through grand declarations, but through repeated changes in what they make visible and what they make valuable.
+
+So Heartflow becomes more than a name. It becomes a method of attention. It becomes a promise that the future does not have to be a race to the bottom of human worth. It can be a surface on which people are recognized for the full range of what they carry: mind, care, grit, imagination, and the quiet courage to keep going. In that future, the robotic age does not erase humanity. It helps reveal what humanity was for.
+
+And if the story is told correctly, the final lesson will be simple enough to remember and large enough to live by:
+
+$$
+\mathrm{Future} = \mathrm{Technology} + \mathrm{Kindness} + \mathrm{Access} + \mathrm{Repair}
+$$
+
+Without kindness, technology becomes cold power. Without access, it becomes a gated tool. Without repair, it becomes a machine that repeats yesterday’s harms. But with all four together, the future can become a place where intelligence is not trapped behind poverty, where innovation is not reserved for the already secure, and where every person has a better chance of becoming visible in the light of what they can actually do.
+
+The story does not end there, because any serious attempt to build an Economoia surface has to reckon with scale. A small tool can be benevolent by default simply because it touches few lives. A large tool has no such luxury. Once a system begins to influence decisions at the level of institutions, its mistakes become multiplied. Its blind spots become policy. Its good guesses become norms. For that reason, Heartflow must be designed with a permanent suspicion of its own certainty. The purpose of the story is not to glorify confidence. It is to design a machine that knows how to stay teachable.
+
+Teachability is one of the most underrated qualities in any intelligence system, human or machine. A teachable system can update when confronted with evidence. It can revise its assumptions without collapsing its identity. It can say, in effect, "I was too narrow, let me widen." That is a profoundly moral act. It is also a practical act, because the world changes faster than rigid institutions can survive. If Heartflow can remain teachable, it can remain useful. If it becomes dogmatic, it will become another kind of obstacle.
+
+To stay teachable, the surface must respect ambiguity. Ambiguity is not always a bug. Sometimes it is a signal that the system has more to learn. A person may appear inconsistent because their context is inconsistent. A pattern may appear weak because the sampling window is too small. A person may look quiet because they are cautious in environments that punish noise. A surfacing system must not punish ambiguity by pretending it is clarity. Instead, it should treat ambiguity as a prompt for further context, better questions, and slower conclusions.
+
+This is one of the reasons why the story is also a story about dignity. Dignity is not just respect in abstract. Dignity is the experience of being interpreted generously enough to remain whole. When systems misread people, they often force those people to spend energy correcting the record. That correction tax is expensive. It drains the poor, the young, the disabled, the overstretched, and anyone who has to translate themselves repeatedly just to be admitted into the conversation. Heartflow imagines a lower correction tax, where the system does more of the interpretive labor and the human is not required to perform identity cleanup at every door.
+
+The correction tax can be described structurally:
+
+$$
+\mathrm{Burden} = \mathrm{Misread} + \mathrm{Delay} + \mathrm{Repetition} + \mathrm{Gatekeeping}
+$$
+
+The goal is not to make burden vanish completely. That would be impossible. The goal is to reduce the structural burden that prevents people from doing meaningful work. If the surface can lower misread, delay, repetition, and gatekeeping, it increases the probability that talent turns into contribution. That is a social return on design.
+
+There is a historical reason this kind of surface has become necessary. Industrial society made visible what it could measure: labor hours, throughput, output, and ownership. Digital society made visible what it could capture: clicks, shares, reactions, and dwell time. The next society may need to make visible what neither of the earlier regimes could comfortably hold: care, context, recovery, integrity, cross-domain insight, and the ability to hold others together under pressure. Heartflow is written into that historical transition. It asks whether an interface can learn to value the forms of human work that have always been most essential and least rewarded.
+
+That is why the project feels both technical and moral. A technical system decides what it can detect. A moral system decides what it is for. Heartflow tries to keep those questions together. The detection layer must be sharp enough to be useful. The purpose layer must be humane enough to be trusted. If either collapses, the whole thing becomes distorted. An accurate but cruel system is not a success. A kind but ungrounded system is not enough either. The future requires both accuracy and care.
+
+This tension is visible in the very idea of a score. Scores can simplify reality into a number, but the value of a score is not the number itself. The value is whether the score helps a person or institution take a better next step. That means the system has to be readable. It has to be corrigible. It has to be placed inside a larger conversation. Heartflow should never be the last word on a person. It should be the beginning of a better question.
+
+And questions are where the story deepens. Who counts as intelligent? Who counts as creative? Who counts as trustworthy? Who gets a second look? Who gets a mentor, a grant, a job, a bridge, a correction, a pause, a chance? Most large social systems answer these questions through habit rather than principle. Heartflow tries to answer them through explicit logic. That is not enough on its own, but it is better than pretending the questions do not exist.
+
+If we push the story further, we reach the realm of collective memory. Societies remember what they reward. Over time, that reward memory shapes culture. If a culture repeatedly rewards aggression, it becomes more aggressive. If it rewards extraction, it becomes extractive. If it rewards patience, reciprocity, and repair, it becomes more durable. Heartflow wants to become an instrument that helps a culture remember durability. It is a memory machine for better civic habits.
+
+That memory also has to include failure. No system that claims to support the vulnerable can ignore failure. It must be able to admit when its surfaces are incomplete, when its categories are too blunt, when its confidence is too high, when its measurements have missed the lived complexity of a person. Failure, in the right architecture, becomes a source of refinement. In the wrong architecture, failure becomes denial. The story asks Heartflow to choose refinement over denial every time.
+
+One way to think about the system's ethical loop is this:
+
+$$
+\mathrm{Trust}_{t+1} = \mathrm{Trust}_t + \phi(\mathrm{Transparency}, \mathrm{Accuracy}, \mathrm{Care}) - \psi(\mathrm{Opacity}, \mathrm{Harm}, \mathrm{Delay})
+$$
+
+Trust grows when a system is transparent, accurate, and caring. Trust shrinks when it is opaque, harmful, and slow to correct itself. The functions $\phi$ and $\psi$ are not simple numbers. They are living relationships. But writing them out helps emphasize that trust is earned through behavior, not declared through branding.
+
+The story of Heartflow is especially important because it refuses to treat the future as something that only happens to the already powerful. The future is often depicted as a prize for the best-resourced actors, as if technological acceleration naturally favors those already at the top. But history is more complex. Tools can widen the field if they are designed with widening in mind. A surfacing system can help redistribute attention toward places where talent has been buried. It can help move value toward the people who make systems more humane. It can help transform the logic of advancement from exclusionary to collaborative.
+
+To make that real, the system must learn to recognize different forms of contribution. There is the contribution of the builder who ships code. There is the contribution of the caregiver who keeps a family together. There is the contribution of the neighbor who notices isolation early. There is the contribution of the organizer who translates grievance into change. There is the contribution of the quiet expert whose knowledge only becomes visible under pressure. A mature surface learns not to rank these too quickly against each other. It learns to compare them only when comparison is truly useful, and even then with caution.
+
+The reason this feels radical is that most systems are trained to optimize for a narrower world. They tend to favor what is easiest to count. Heartflow is trying to widen the countable. It wants to make social intelligence visible. It wants to make practical compassion measurable without stripping it of meaning. It wants to help us notice that an act of care can save more value than an act of spectacle. That is an economic statement, but it is also a civilizational one.
+
+Consider a city where the system rewards not only productivity, but also connection. In that city, people who bridge communities would become more visible. People who teach others would become more visible. People who stabilize fragile situations would become more visible. People who create tools others can use would become more visible. Such a city would not eliminate ambition. It would redirect it. It would encourage ambition toward public good, toward shared resilience, toward long-horizon value.
+
+That is the city Heartflow gestures toward. It may not build the city directly, but it can help create the epistemic conditions for it. It can help ask better questions about where value lives. It can help make decisions more proportionate to reality. It can help institutions distinguish between volatility and vitality. It can help people find one another across class, geography, and status. That is what surfacing means at scale.
+
+The math of the city can be imagined another way:
+
+$$
+\mathrm{Public\ Good} = \int_{0}^{T} \left(\mathrm{Access}(t) + \mathrm{Care}(t) + \mathrm{Opportunity}(t)\right) \, dt
+$$
+
+The area under that curve is not merely output. It is accumulated possibility. If access, care, and opportunity remain low, the integral stays small even when GDP rises. If they increase over time, the city becomes more liveable, more generative, and more capable of keeping people from falling through the cracks. Heartflow is a tool that could help raise that curve by making the cracks visible sooner.
+
+There is also a psychological dimension. People are shaped by the feedback they receive. When a system recognizes only achievement, people may hide vulnerability. When it recognizes only productivity, people may hide recovery. When it recognizes only image, people may hide substance. Heartflow is trying to create a feedback environment where the human being does not have to amputate half of themselves to receive value. That is an unusual ambition for software, and it is precisely why the story feels worth telling.
+
+The story should also be honest about danger. A surfacing system can be misused. Anything that can reveal hidden value can also be used to extract hidden value. Anything that can identify potential can also be used to rank and discipline. So the story must include safeguards. There should be transparency about what the system sees. There should be limits on how its outputs are used. There should be feedback loops that let people contest interpretations. There should be an ethical commitment to keep the system aligned with dignity. In other words, the same values that make the surface useful must make it safe.
+
+That safety is part of the beauty. Safety is not the opposite of ambition. Safety is what allows ambition to become durable. A person who feels seen but not safe will withhold. A person who feels safe but not seen will drift. The ideal condition is both. Heartflow aims at that combination: recognition with restraint, interpretation with humility, confidence with correction. When those come together, the surface becomes a place where people can take risks that are proportionate to their actual ability, not to the noise around them.
+
+Another way to say this is that Heartflow wants to reduce the amount of wasted motion in human life. Wasted motion happens when a person is trying hard but the system is misaligned with their strengths. Wasted motion happens when someone is forced to prove the obvious, or when a good idea has no channel, or when an act of care is invisible to the institution that depends on it. A good surfacing system lowers wasted motion by making the path between intention and recognition shorter.
+
+That path matters most in the spaces where people are already under strain. The overburdened student. The underpaid caretaker. The early-stage founder. The immigrant navigating translation gaps. The engineer who is talented but under-networked. The artist who needs structure. The worker whose skill has outgrown their title. The person with an unconventional background who keeps being misunderstood by default. Heartflow says that these people are not edge cases. They are the place where the system's moral honesty is tested.
+
+This is the point where the story becomes a manifesto in disguise. It is a manifesto for a world that does not confuse data with destiny. A world that does not confuse calm speech with intelligence, or prestige with virtue, or speed with excellence. A world that does not force the burdened to perform ease before they can be helped. A world that understands that if you want more innovation, you must first create more humane conditions for experimentation. A world that recognizes that kindness is not merely emotional pleasantness; it is a strategic condition for collective intelligence.
+
+The next equation names that condition:
+
+$$
+\mathrm{Collective\ Intelligence} = \sum_{i=1}^{n} \mathrm{Perspective}_i \cdot \mathrm{Trust}_i \cdot \mathrm{Contribution}_i
+$$
+
+If perspectives are excluded, trust erodes. If trust erodes, contributions shrink. If contributions shrink, the collective intelligence of the group falls below what it could have been. A surfacing system helps preserve this sum by ensuring more perspectives are visible, more trust is cultivated, and more contributions can find a place to matter.
+
+The story also asks us to redefine success. Success is often defined as ascent, accumulation, and status. But in a world of widening inequality and accelerating automation, those definitions can become too narrow and too socially expensive. Heartflow proposes a broader success condition: the ability to surface value in places where markets alone would fail to notice it. That could mean a more equitable labor market, a better talent pipeline, a more humane nonprofit ecosystem, a stronger public sector, or a better fit between personal gifts and public need.
+
+The person who understands this story will see that the system is not just serving individuals. It is serving the connective tissue of society. It is helping institutions become more accurate in the presence of human complexity. It is helping communities reward what sustains them. It is helping the robotic age remain tethered to moral memory. That may sound grand, but civilization is built from grand ambitions made practical in small increments.
+
+So the final chapter is not a triumphal march. It is a practice. A repeated practice of seeing more carefully. A repeated practice of rewarding more justly. A repeated practice of building interfaces that make the hidden visible without stripping it of depth. A repeated practice of admitting uncertainty and refining the surface. A repeated practice of keeping kindness in the architecture. A repeated practice of remembering that the people who look least legible to the current system are often the people most deserving of a better one.
+
+In the end, Heartflow's story is a bet that software can participate in moral repair. Not by pretending to be a savior, and not by pretending to replace institutions, but by improving the surface on which institutions and people meet. If it succeeds, the result will not be a perfect world. It will be a more permeable one. A world where intelligence is less hidden by poverty, where innovation is less monopolized by privilege, where kindness can count as a measurable force, and where the robotic age is guided toward dignity rather than away from it.
+
+That is the larger meaning of the story. Not that the future will automatically be better, but that the future can be designed to notice more of what matters. And when a civilization learns to notice more of what matters, it has a chance to become more just, more generous, and more alive to the people within it.
+"""
+
+
 INFO_PAGE = """
 <!doctype html>
 <html lang='en'>
@@ -1496,8 +1713,10 @@ INFO_PAGE = """
     body[data-page='creators'] .sub{color:#f2e8ff}
     body[data-page='about'] .nav a{border-color:rgba(108,229,255,.28)}
     body[data-page='creators'] .nav a{border-color:rgba(255,183,88,.28)}
+    body[data-page='story'] .nav a{border-color:rgba(179,126,255,.28)}
     body[data-page='about'] .content{background:rgba(0,0,0,.18)}
     body[data-page='creators'] .content{background:rgba(0,0,0,.24)}
+    body[data-page='story'] .content{background:rgba(0,0,0,.22)}
     @media (min-width:1200px){body[data-page='main'] .card{max-width:1340px}}
     @media (max-width:1040px){.hero{grid-template-columns:1fr}.hero-copy{order:1}.hero-visual{order:2}}
     @media (max-width:900px){.card{width:98vw;padding:.8rem}.content{max-width:100%;padding:.75rem}.nav a{font-size:.88rem;padding:.28rem .66rem}.hero{gap:.8rem}.hero-panel{padding:.85rem}h1{font-size:clamp(2rem,9vw,3rem)}.grid,.axis-explainer-grid{grid-template-columns:1fr}.btn{min-width:100%;font-size:1rem}}
@@ -1531,7 +1750,7 @@ INFO_PAGE = """
 </head>
 <body data-page='{{ page_kind }}' style='--hf-bg1: {{ theme.bg1 }}; --hf-bg2: {{ theme.bg2 }}; --hf-bg3: {{ theme.bg3 }}; --hf-accent: {{ theme.accent }}; --hf-accent2: {{ theme.accent2 }}; --hf-glass: {{ theme.glass }}; --hf-line: {{ theme.line }};'>
   <div class='wrap'><section class='card'>
-    <nav class='nav'><a href='/'>Home</a><a href='/about'>About</a><a href='/creators'>Creators</a></nav>
+    <nav class='nav'><a href='/'>Home</a><a href='/about'>About</a><a href='/creators'>Creators</a><a href='/story'>Story</a></nav>
     <div class='hero'>
       <div class='hero-panel hero-copy'>
         <div class='hero-kicker'>{{ seo.title }}</div>
@@ -1619,7 +1838,7 @@ PAGE = """
 <body data-page='{{ page_kind }}' style='--hf-bg1: {{ theme.bg1 }}; --hf-bg2: {{ theme.bg2 }}; --hf-bg3: {{ theme.bg3 }}; --hf-accent: {{ theme.accent }}; --hf-accent2: {{ theme.accent2 }}; --hf-glass: {{ theme.glass }}; --hf-line: {{ theme.line }};'>
 <div class='wrap'>
   <section class='card' {% if result %}style="--hf-glass: {{ result.glass }};"{% endif %}>
-    <nav class='nav'><a href='/'>Home</a><a href='/about'>About</a><a href='/creators'>Creators</a></nav>
+    <nav class='nav'><a href='/'>Home</a><a href='/about'>About</a><a href='/creators'>Creators</a><a href='/story'>Story</a></nav>
     <h1>Heartflow</h1>
     <p class='sub'>Secure AI signal studio · encrypted storage · quantum-inspired scoring</p>
     {% if error %}<div class='panel' style='border-color:#ff9a9a'>{{ error }}</div>{% endif %}
@@ -1763,6 +1982,11 @@ def about_page():
 @app.get("/creators")
 def creators_page():
     return render_template_string(INFO_PAGE, content_html=to_markdown_html(CREATORS_MD, 6000), page_kind="creators", theme=themed_palette("creators"), seo=seo_meta("creators"))
+
+
+@app.get("/story")
+def story_page():
+    return render_template_string(INFO_PAGE, content_html=to_markdown_html(STORY_MD, 12000), page_kind="story", theme=themed_palette("story"), seo=seo_meta("story"))
 
 
 @app.post("/analyze")
