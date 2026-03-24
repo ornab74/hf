@@ -306,6 +306,11 @@ def csrf_ok(token: str) -> bool:
 
 
 
+def client_fingerprint() -> str:
+    hdr = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+    ip = hdr or request.remote_addr or "unknown"
+    ua = request.headers.get("User-Agent", "unknown")[:160]
+    return f"{ip}|{ua}"
 
 def client_fingerprint() -> str:
     hdr = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
@@ -332,6 +337,17 @@ def sanitize_text(v: Any, n: int = 320) -> str:
     cleaned = cleaned.replace("<", "").replace(">", "").replace("javascript:", "")
     return cleaned.strip()[:n]
 
+def rate_limit_ok(key: str) -> bool:
+    now = time.time()
+    with RATE_LOCK:
+        q = RATE_LIMIT_STATE[key]
+        while q and now - q[0] > 600:
+            q.popleft()
+        in_last_min = sum(1 for t in q if now - t <= 60)
+        if in_last_min >= RATE_LIMIT_PER_MIN or len(q) >= RATE_LIMIT_BURST_10M:
+            return False
+        q.append(now)
+        return True
 
 def sanitize_handle(v: str) -> str:
     h = (v or "").strip().lstrip("@").strip()
@@ -339,6 +355,12 @@ def sanitize_handle(v: str) -> str:
         raise ValueError("Handle must be 1-15 chars of letters, numbers, underscore.")
     return h
 
+CAPTCHA_QUESTIONS = [
+    "What is your dream for humanity?",
+    "How would you reduce harm in online discourse?",
+    "What does responsible innovation mean to you?",
+    "How can powerful systems stay aligned with human wellbeing?",
+]
 
 # ---- core scoring ----
 def _require_x_api_access() -> None:
