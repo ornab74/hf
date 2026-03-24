@@ -1083,7 +1083,7 @@ INFO_PAGE = """
     @media (max-width:900px){.card{width:98vw;padding:.8rem}.content{max-width:100%;padding:.75rem}.nav a{font-size:.88rem;padding:.28rem .66rem}}
   </style>
   <script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']],processEscapes:true,processEnvironments:true},options:{renderActions:{addMenu:[]}}};window.addEventListener('load',()=>{if(window.MathJax&&MathJax.typesetPromise){MathJax.typesetPromise();}});</script>
-  <script defer src='https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js' integrity='sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI=' crossorigin='anonymous'></script>
+  <script defer src='{{ url_for("static", filename="vendor/mathjax/es5/tex-mml-chtml.js") }}'></script>
 </head>
 <body>
   <div class='wrap'><section class='card'>
@@ -1138,7 +1138,7 @@ PAGE = """
     @media (max-width:900px){.grid,.axis-explainer-grid{grid-template-columns:1fr}.btn{min-width:100%;font-size:1rem}}
   </style>
   <script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']],processEscapes:true,processEnvironments:true}};window.addEventListener('load',()=>{if(window.MathJax&&MathJax.typesetPromise){MathJax.typesetPromise();}});</script>
-  <script defer src='https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js' integrity='sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI=' crossorigin='anonymous'></script>
+  <script defer src='{{ url_for("static", filename="vendor/mathjax/es5/tex-mml-chtml.js") }}'></script>
 </head>
 <body>
 <div class='wrap'>
