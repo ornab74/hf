@@ -62,6 +62,39 @@ AXIS_TERMS = {
     "HCS": ["together", "align", "peace", "respect", "team", "bridge", "listen"],
 }
 
+AXIS_EXPLAINERS = [
+    {
+        "key": "SR",
+        "label": "Systems / Reach",
+        "desc": "How strongly the signal points to scale, infrastructure, and long-range execution.",
+    },
+    {
+        "key": "CT",
+        "label": "Care / Trust",
+        "desc": "How much the language emphasizes support, gratitude, and human connection.",
+    },
+    {
+        "key": "CF",
+        "label": "Creation / Flow",
+        "desc": "How much the text reflects novelty, shipping energy, and creative momentum.",
+    },
+    {
+        "key": "GDI_INV",
+        "label": "Commons / Open",
+        "desc": "How strongly the content leans toward openness, transparency, fairness, and shared good.",
+    },
+    {
+        "key": "CAP",
+        "label": "Courage / Pressure",
+        "desc": "How much the language signals risk tolerance, challenge, and direct stance-taking.",
+    },
+    {
+        "key": "HCS",
+        "label": "Harmony / Social",
+        "desc": "How strongly the text signals alignment, teamwork, listening, and social repair.",
+    },
+]
+
 WRITE_GROUPS = ["red", "amber", "green", "blue", "violet"]
 WRITE_LOCKS = {g: Lock() for g in WRITE_GROUPS}
 
@@ -882,49 +915,131 @@ def analyze_handle(handle: str) -> Dict[str, Any]:
 
 def to_markdown_html(text: Any, limit: int = 4000) -> Markup:
     clean = sanitize_text(text, limit)
+    math_blocks: List[str] = []
+
+    def _stash_math(match: re.Match) -> str:
+        math_blocks.append(match.group(0))
+        return f"@@HF_MATH_{len(math_blocks) - 1}@@"
+
+    clean = re.sub(r"\$\$(.+?)\$\$", _stash_math, clean, flags=re.S)
+    clean = re.sub(r"(?<!\\)\$(.+?)(?<!\\)\$", _stash_math, clean, flags=re.S)
     html = markdown.markdown(
         clean,
         extensions=["fenced_code", "tables", "sane_lists", "nl2br"],
     )
+    for i, block in enumerate(math_blocks):
+        html = html.replace(f"@@HF_MATH_{i}@@", block)
     return Markup(html)
 
 
 ABOUT_MD = r"""
 # About Heartflow
 
-Heartflow analyzes public tweet text and returns structured guidance.
+Heartflow turns public tweet text into a structured profile, then translates that profile into readable guidance, simulations, and next-step suggestions.
 
 ## In plain terms
 - You enter a handle.
-- Heartflow computes a 6-axis profile.
-- You get practical suggestions, risk outlooks, and simulation notes.
+- Heartflow gathers public signals and scores them across six axes.
+- The system blends deterministic logic, encrypted storage, and model-assisted interpretation.
+- You get a readable summary instead of a wall of raw diagnostics.
+
+## What the system does
+1. Collects and normalizes public text signals.
+2. Builds a compact scoring surface across the `SR`, `CT`, `CF`, `GDI_INV`, `CAP`, and `HCS` axes.
+3. Generates markdown-friendly summaries for reasoning, simulations, and lore.
+4. Stores analysis results with AES-GCM encryption.
+5. Exposes the result through a lightweight web interface with MathJax support.
 
 ## Security and data
-- CSRF + rate limiting.
+- CSRF protection and rate limiting.
 - AES-GCM encrypted SQLite storage.
-- Configurable strict X API compliance.
+- Configurable strict X API compliance guardrails.
+- Sanitized markdown output for any generated text that reaches the page.
 
-## Formula reference
-$$H = -\sum_i p_i \log_2 p_i$$
+## Design principles
+- Prefer readable output over raw model chatter.
+- Keep deterministic fallbacks available when remote services are unavailable.
+- Preserve enough structure that the result can be inspected, shared, and extended.
+- Make the interpretation layer explicit so users can tell what was measured and what was inferred.
 
-$$\mathrm{HF}_{overall}=\frac{1}{6}\sum_{k\in\{SR,CT,CF,GDI\_INV,CAP,HCS\}} s_k$$
+## Equation reference
+
+$$
+H = -\sum_i p_i \log_2 p_i
+$$
+
+$$
+\mathrm{HF}_{overall} = \frac{1}{6}\sum_{k\in\{\mathrm{SR},\mathrm{CT},\mathrm{CF},\mathrm{GDI\_INV},\mathrm{CAP},\mathrm{HCS}\}} s_k
+$$
+
+## Why it matters
+Heartflow is intended to feel more like an instrument panel than a chatbot. The goal is to keep the signal visible, the math inspectable, and the output useful enough to act on without losing context.
+
+## How to read a result
+Heartflow output is easiest to read as a layered summary rather than a single score.
+
+- The headline score gives you a quick sense of overall tone.
+- The axis bars show which kinds of language are strongest.
+- The reasoning block explains how the system arrived at the result.
+- The simulations and suggestions offer a forward-looking interpretation, not a fixed prediction.
+
+## Axis guide
+- `SR`: systems, scale, infrastructure, and execution reach.
+- `CT`: care, trust, gratitude, and human connection.
+- `CF`: creation, novelty, momentum, and shipping energy.
+- `GDI_INV`: openness, fairness, transparency, and shared-good language.
+- `CAP`: courage, pressure, directness, and risk tolerance.
+- `HCS`: harmony, listening, coordination, and social repair.
+
+## Known limits
+Heartflow is interpretive, not omniscient.
+
+- It works best on public text with enough signal to analyze.
+- It can miss sarcasm, code-switching, or context that lives outside the text.
+- The scores are meant to be useful heuristics, not absolute truth.
+- Compliance constraints may limit what the system can fetch or infer.
+
+## FAQ
+**Is this a diagnosis tool?** No. It is a structured text analysis interface.
+
+**Does a higher score always mean something is better?** Not necessarily. Different axes describe different kinds of expression.
+
+**Why show equations at all?** To make the scoring surface easier to inspect and trust.
 """
 
 
 CREATORS_MD = r"""
 # Creators
 
-Heartflow is built for researchers, builders, and safety-minded operators.
+Heartflow is built by and for people who like their AI systems legible, testable, and a little ambitious.
 
-## Design values
-1. Security first (CSRF, rate limits, encrypted storage).
-2. Transparent scoring surface.
-3. Human-centered interpretation over blind automation.
+## What we are building
+Heartflow is a signal studio for public text. It turns a handle into a repeatable analysis pipeline that combines scoring, simulation, and narrative explanation.
+
+## What we value
+1. Security by default.
+2. Transparent scoring over black-box output.
+3. Human-readable interpretation over raw model chatter.
+4. Reproducibility, logging, and deterministic fallbacks.
+5. Practical utility for builders, researchers, and safety-minded operators.
+
+## How to contribute
+- Keep changes reproducible and document runtime assumptions.
+- Preserve compliance guardrails and sanitization steps.
+- Prefer compact, explicit equations and readable markdown.
+- Test both the main analysis page and the info pages after any rendering change.
 
 ## Contact
-If you are extending Heartflow, keep changes reproducible and document model/runtime assumptions.
+If you are extending Heartflow, aim for clarity first. The best additions make the system easier to understand, not just more complex.
 
-$$\text{Trust} \propto \text{Transparency} \times \text{Reproducibility}$$
+## Collaboration notes
+- Keep markdown sources readable so future edits stay simple.
+- Prefer small, explicit sections over long unbroken paragraphs.
+- When adding new math, keep it in display blocks and let MathJax handle the rendering.
+
+$$
+\mathrm{Trust} \propto \mathrm{Transparency} \times \mathrm{Reproducibility}
+$$
 """
 
 
@@ -939,17 +1054,35 @@ INFO_PAGE = """
     body{margin:0;font-family:Inter,system-ui,sans-serif;background:radial-gradient(circle at 10% 16%,rgba(255,99,169,.5) 0%,rgba(255,99,169,0) 33%),radial-gradient(circle at 84% 12%,rgba(102,133,255,.48) 0%,rgba(102,133,255,0) 32%),radial-gradient(circle at 14% 82%,rgba(54,214,196,.44) 0%,rgba(54,214,196,0) 34%),radial-gradient(circle at 92% 84%,rgba(255,183,88,.35) 0%,rgba(255,183,88,0) 28%),linear-gradient(152deg,#050913,#121a30 58%,#091126 100%);background-attachment:fixed;color:#eaf3ff}
     .wrap{min-height:100vh;display:grid;place-items:center;padding:.8rem}
     .card{width:min(1020px,98vw);border:1px solid rgba(255,255,255,.2);border-radius:20px;padding:1rem;background:rgba(8,14,28,.7);backdrop-filter:blur(14px)}
-    h1{margin:.2rem 0 .4rem 0;text-align:center;font-size:clamp(1.6rem,4.8vw,2.9rem);letter-spacing:.04em;text-transform:uppercase}
+    .content{max-width:68ch;margin:0 auto}
+    h1{margin:.2rem 0 .45rem 0;text-align:center;font-size:clamp(1.55rem,4.5vw,2.6rem);letter-spacing:.04em;text-transform:uppercase}
+    h2{margin:1.35rem 0 .55rem;font-size:clamp(1.1rem,2.5vw,1.45rem)}
+    h3{margin:1rem 0 .45rem;font-size:1.05rem}
     .sub{text-align:center;color:#cae0ff;margin-bottom:.7rem}
     .nav{display:flex;justify-content:center;gap:.55rem;flex-wrap:wrap;margin-bottom:.45rem}
     .nav a{color:#d8e8ff;text-decoration:none;border:1px solid rgba(255,255,255,.24);border-radius:999px;padding:.3rem .75rem;font-size:.92rem}
     .content{border:1px solid rgba(255,255,255,.2);border-radius:12px;background:rgba(0,0,0,.2);padding:.8rem}
-    .md h1,.md h2,.md h3{margin:.55rem 0 .4rem}
-    .md p,.md li{line-height:1.5}
-    .md code{background:rgba(255,255,255,.12);padding:.1rem .3rem;border-radius:6px}
-    @media (max-width:900px){.card{width:98vw}}
+    .md > *:first-child{margin-top:0}
+    .md > *:last-child{margin-bottom:0}
+    .md h1,.md h2,.md h3{margin:.75rem 0 .45rem}
+    .md p,.md li{line-height:1.62}
+    .md p{margin:.55rem 0}
+    .md ul,.md ol{padding-left:1.25rem;margin:.4rem 0 .7rem}
+    .md li{margin:.22rem 0}
+    .md blockquote{margin:.7rem 0;padding:.35rem .85rem;border-left:3px solid rgba(255,255,255,.25);background:rgba(255,255,255,.05)}
+    .md strong{color:#fff}
+    .md pre{overflow:auto;padding:.7rem;border-radius:10px;background:rgba(0,0,0,.25)}
+    .md table{width:100%;border-collapse:collapse;margin:.7rem 0}
+    .md th,.md td{border:1px solid rgba(255,255,255,.14);padding:.45rem .55rem;text-align:left}
+    .md hr{border:0;border-top:1px solid rgba(255,255,255,.18);margin:1rem 0}
+    .md code{background:rgba(255,255,255,.12);padding:.1rem .3rem;border-radius:6px;overflow-wrap:anywhere}
+    .mjx-container{overflow-x:auto;overflow-y:hidden;margin:.5rem 0;max-width:100%}
+    .md .callout{border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:.7rem .85rem;margin:.8rem 0;background:rgba(255,255,255,.05)}
+    .md .callout h4{margin:0 0 .35rem;font-size:1rem}
+    .md .callout p{margin:.35rem 0 0}
+    @media (max-width:900px){.card{width:98vw;padding:.8rem}.content{max-width:100%;padding:.75rem}.nav a{font-size:.88rem;padding:.28rem .66rem}}
   </style>
-  <script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']]}};</script>
+  <script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']],processEscapes:true,processEnvironments:true},options:{renderActions:{addMenu:[]}}};window.addEventListener('load',()=>{if(window.MathJax&&MathJax.typesetPromise){MathJax.typesetPromise();}});</script>
   <script defer src='https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js'></script>
 </head>
 <body>
@@ -992,13 +1125,19 @@ PAGE = """
     .meta{color:#cfe2ff}
     .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.7rem}
     .panel{border:1px solid rgba(255,255,255,.2);border-radius:12px;background:rgba(0,0,0,.2);padding:.7rem;margin-top:.7rem}
+    .axis-explainer-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.65rem;margin-top:.6rem}
+    .axis-explainer-card{border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:.65rem;background:rgba(0,0,0,.18)}
+    .axis-explainer-head{display:flex;align-items:baseline;gap:.5rem;flex-wrap:wrap;margin-bottom:.35rem}
+    .axis-key{display:inline-flex;align-items:center;justify-content:center;min-width:4.7rem;padding:.12rem .45rem;border-radius:999px;background:rgba(108,229,255,.18);border:1px solid rgba(108,229,255,.3);font-size:.82rem;font-weight:700;letter-spacing:.03em}
+    .axis-label{font-weight:700;color:#f1f7ff}
+    .axis-explainer-card p{margin:0;color:#d6e8ff;line-height:1.45}
     .bar{height:9px;border-radius:8px;overflow:hidden;background:rgba(255,255,255,.14)}
     .fill{height:100%;background:linear-gradient(90deg,#6ce5ff,#6f8dff)}
     .recent{font-size:.92rem;color:#c8defd}
     @keyframes r{to{transform:rotate(360deg)}}
-    @media (max-width:900px){.grid{grid-template-columns:1fr}.btn{min-width:100%;font-size:1rem}}
+    @media (max-width:900px){.grid,.axis-explainer-grid{grid-template-columns:1fr}.btn{min-width:100%;font-size:1rem}}
   </style>
-  <script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']]}};</script>
+  <script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']],processEscapes:true,processEnvironments:true}};window.addEventListener('load',()=>{if(window.MathJax&&MathJax.typesetPromise){MathJax.typesetPromise();}});</script>
   <script defer src='https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js'></script>
 </head>
 <body>
@@ -1021,6 +1160,20 @@ PAGE = """
       <h2>@{{ result.handle }} · {{ result.vibe }}</h2>
       <p class='meta'>Overall: <strong>{{ result.overall }}%</strong> · confidence={{ result.confidence }} · risk={{ result.risk_score }} · tweets={{ result.tweet_count }}</p>
       <div class='markdown'>{{ result.reasoning_html|safe }}</div>
+      <div class='panel' style='margin-top:.8rem;background:rgba(255,255,255,.06)'>
+        <h3>6-Axis Explainer</h3>
+        <div class='axis-explainer-grid'>
+          {% for axis in axis_explainers %}
+          <div class='axis-explainer-card'>
+            <div class='axis-explainer-head'>
+              <span class='axis-key'>{{ axis.key }}</span>
+              <span class='axis-label'>{{ axis.label }}</span>
+            </div>
+            <p>{{ axis.desc }}</p>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
       <div class='grid'>
         {% for k,v in result.axes.items() %}
         <div>
@@ -1096,7 +1249,7 @@ PAGE = """
 @app.get("/")
 def index():
     prefill = sanitize_text(request.args.get('handle', ''), 15)
-    return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=None, handle_prefill=prefill)
+    return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=None, handle_prefill=prefill, axis_explainers=AXIS_EXPLAINERS)
 
 
 @app.get("/about")
@@ -1120,18 +1273,19 @@ def analyze():
             recent=recent_analyses(),
             error="Session validation expired. Please submit again.",
             handle_prefill=request.form.get('handle', ''),
+            axis_explainers=AXIS_EXPLAINERS,
         )
     if not rate_limit_ok(client_fingerprint()):
-        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error="Rate limit exceeded. Please wait and retry.", handle_prefill=request.form.get('handle', ''))
+        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error="Rate limit exceeded. Please wait and retry.", handle_prefill=request.form.get('handle', ''), axis_explainers=AXIS_EXPLAINERS)
     try:
         handle = sanitize_handle(request.form.get("handle", ""))
         result = analyze_handle(handle)
         save_analysis(handle, result)
-        return render_template_string(PAGE, csrf_token=csrf_token(), result=result, recent=recent_analyses(), error=None, handle_prefill=handle)
+        return render_template_string(PAGE, csrf_token=csrf_token(), result=result, recent=recent_analyses(), error=None, handle_prefill=handle, axis_explainers=AXIS_EXPLAINERS)
     except ComplianceError as exc:
-        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=sanitize_text(exc, 300), handle_prefill=request.form.get('handle', ''))
+        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=sanitize_text(exc, 300), handle_prefill=request.form.get('handle', ''), axis_explainers=AXIS_EXPLAINERS)
     except Exception as exc:
-        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=sanitize_text(exc, 300), handle_prefill=request.form.get('handle', ''))
+        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=sanitize_text(exc, 300), handle_prefill=request.form.get('handle', ''), axis_explainers=AXIS_EXPLAINERS)
 
 
 @app.get("/healthz")
