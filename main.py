@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import hmac
+import html
 import json
 import math
 import os
@@ -47,7 +48,7 @@ app.config.update(
     SECRET_KEY=FLASK_SECRET_KEY,
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
-    SESSION_COOKIE_SECURE=os.getenv("SESSION_COOKIE_SECURE", "0") == "1",
+    SESSION_COOKIE_SECURE=os.getenv("SESSION_COOKIE_SECURE", "1") == "1",
     MAX_CONTENT_LENGTH=64 * 1024,
 )
 
@@ -540,6 +541,58 @@ Return strict JSON only:
 }
 """
 
+LIFE_OPTIMIZATION_MERMAID_PROMPT = """
+You are Heartflow's life optimization diagram generator.
+
+TASK
+- Given the full Heartflow analysis output, produce a single Mermaid flowchart that maps the person's optimization structure.
+- The diagram should be practical, calm, and action-oriented.
+- Use only Mermaid flowchart syntax.
+- Keep node labels short and readable.
+- Prefer a structure that connects: current state -> constraints -> strengths -> leverage points -> next actions -> review loop.
+- Use the analysis output as RAG context. Do not invent unsupported facts.
+- Include at least two subgraphs and one decision node.
+- Add a feedback edge that makes the loop explicit.
+- Add 1-2 edge labels for timing or load gating (short phrases only).
+- Surface the top axes as leverage nodes and the lowest axis as a stabilizer node.
+- Keep the diagram stable enough to render on GitHub and in the app.
+- Output strict JSON only:
+{
+  "diagram": "```mermaid\\nflowchart TD\\n...\\n```",
+  "summary": "<=260 chars",
+  "title": "<=60 chars"
+}
+"""
+
+VEHICLE_SAFETY_PROMPT = """
+You are Heartflow's vehicle safety simulation scanner.
+
+TASK
+- Use the provided quantum_RAG, cpu/ram profile, HF axes, and dynamic layer metadata to produce a grounded vehicle-safety outlook.
+- Treat the model as a safety heuristic, not a medical or legal authority.
+- Focus on attention, fatigue, load, timing, and stability.
+- Be conservative when cpu/ram are elevated or CAP is high and HCS/CT are weak.
+- Weigh daily risk more heavily toward short-term load and cognitive pressure.
+- Weigh weekly risk more heavily toward repeated instability and schedule compression.
+- Weigh monthly risk more heavily toward trend persistence and recovery quality.
+- If the signal is mixed, err on the side of medium or high rather than low.
+- Use quantum_RAG entropy, top-state concentration, and phase signatures as nonlocal variability signals.
+- Provide concrete drivers and safe-window guidance for safer timing.
+- Return strict JSON only:
+{
+  "daily":"low|medium|high",
+  "weekly":"low|medium|high",
+  "monthly":"low|medium|high",
+  "signals":["<=220 chars"],
+  "drivers":["<=220 chars"],
+  "safe_windows":["<=120 chars"],
+  "constraints":["<=200 chars"],
+  "mitigations":["<=220 chars"],
+  "outlook":"<=520 chars",
+  "confidence":0..1
+}
+"""
+
 
 def clamp(v: float) -> float:
     return max(0.0, min(1.0, float(v)))
@@ -575,6 +628,131 @@ def fallback_advanced_tracks() -> List[Dict[str, Any]]:
         {"track": "Strategic", "priority": 5, "guidance": "Publish a 3-part narrative arc: thesis, risk, and execution proof."},
         {"track": "Relational", "priority": 4, "guidance": "Acknowledge critics and allies explicitly to widen trust bandwidth."},
     ]
+
+
+def fallback_life_optimization_mermaid(result: Dict[str, Any]) -> Dict[str, str]:
+    axes = result.get("axes", {})
+    ranked = sorted(axes.items(), key=lambda kv: kv[1], reverse=True) if axes else [("SR", 0.5)]
+    top_axis = ranked[0][0]
+    second_axis = ranked[1][0] if len(ranked) > 1 else "CT"
+    third_axis = ranked[2][0] if len(ranked) > 2 else "CF"
+    bottom_axis = ranked[-1][0] if ranked else "HCS"
+    diagram = f"""```mermaid
+flowchart TD
+  subgraph S[Signal Surface]
+    A[Current State]
+    C[Strengths: {top_axis}/{second_axis}]
+    W[Stabilizer: {bottom_axis}]
+  end
+  subgraph X[Constraints and Load]
+    B[Constraints]
+    L[Load/Noise]
+    J{{Load High?}}
+  end
+  subgraph V[Leverage Map]
+    D[Leverage: {top_axis}]
+    E[Secondary: {second_axis}]
+    H[Momentum: {third_axis}]
+  end
+  subgraph R[Execution Rhythm]
+    F[Next Action]
+    G[Guardrails]
+    Z[Review Loop]
+  end
+  A --> B
+  A --> C
+  A --> L
+  L --> J
+  J -->|yes| G
+  J -->|no| D
+  C --> D
+  B --> E
+  D --> F
+  E --> F
+  H --> F
+  W --> G
+  F --> Z
+  G --> Z
+  Z --> A
+```"""
+    return {
+        "title": "Life Optimization Structure",
+        "summary": sanitize_text(f"Fallback structure with leverage on {top_axis}/{second_axis}, stabilizer {bottom_axis}, and an explicit load gate.", 260),
+        "diagram": diagram,
+    }
+
+
+def fallback_vehicle_safety_scan(axes: Dict[str, float], quantum_rag: Dict[str, Any], layers: Dict[str, Any]) -> Dict[str, Any]:
+    cap = axes.get("CAP", 0.5)
+    ct = axes.get("CT", 0.5)
+    hcs = axes.get("HCS", 0.5)
+    cf = axes.get("CF", 0.5)
+    cpu = quantum_rag.get("cpu_percent", 0.0)
+    ram = quantum_rag.get("ram_percent", 0.0)
+    entropy = float(quantum_rag.get("probs_entropy", 0.0) or 0.0)
+    top_states = quantum_rag.get("top_states", []) or []
+    top_prob = float(top_states[0].get("prob", 0.0)) if top_states else 0.0
+    load = (cpu + ram) / 2.0
+    load_score = clamp((cpu / 100.0) * 0.55 + (ram / 100.0) * 0.45)
+    pressure = clamp((cap * 0.45) + ((1.0 - ct) * 0.25) + ((1.0 - hcs) * 0.2) + ((1.0 - cf) * 0.1))
+    entropy_norm = clamp(entropy / 3.0)
+    variability = clamp((entropy_norm * 0.6) + ((1.0 - top_prob) * 0.4))
+    stability = clamp((hcs * 0.4) + (ct * 0.3) + ((1.0 - cap) * 0.3))
+
+    daily_score = clamp((0.5 * load_score) + (0.3 * pressure) + (0.2 * variability))
+    weekly_score = clamp((0.35 * load_score) + (0.35 * pressure) + (0.2 * variability) + (0.1 * (1.0 - stability)))
+    monthly_score = clamp((0.25 * load_score) + (0.35 * pressure) + (0.25 * variability) + (0.15 * (1.0 - stability)))
+
+    daily = "high" if daily_score >= 0.66 else "medium" if daily_score >= 0.42 else "low"
+    weekly = "high" if weekly_score >= 0.64 else "medium" if weekly_score >= 0.4 else "low"
+    monthly = "high" if monthly_score >= 0.62 else "medium" if monthly_score >= 0.38 else "low"
+
+    driver_pool = [
+        ("runtime load", load_score),
+        ("cognitive pressure", pressure),
+        ("nonlocal variability", variability),
+        ("stability buffer", 1.0 - stability),
+    ]
+    driver_pool.sort(key=lambda x: x[1], reverse=True)
+    drivers = [sanitize_text(f"{name}={round(score, 3)} influence", 220) for name, score in driver_pool[:3]]
+
+    safe_windows = []
+    if load <= 55 and pressure <= 0.5:
+        safe_windows.append("Lower-load windows when cpu/ram < 55 and pressure is moderate.")
+    if stability >= 0.55:
+        safe_windows.append("Post-rest windows when stability signals are highest.")
+    if not safe_windows:
+        safe_windows.append("Only short trips with wide buffers and minimal multitasking.")
+
+    constraints = [
+        "Avoid late-night or high-compression schedules when load and variability are elevated.",
+        "Defer long drives during high CAP + low CT/HCS cycles.",
+    ]
+    return {
+        "daily": daily,
+        "weekly": weekly,
+        "monthly": monthly,
+        "signals": [
+            sanitize_text(f"Runtime load={load:.1f} with cpu={cpu:.1f} and ram={ram:.1f}.", 220),
+            sanitize_text(f"Entropy={entropy:.3f} and top_state_prob={top_prob:.3f} indicate variability band.", 220),
+            sanitize_text(f"Pressure={pressure:.3f} and stability={stability:.3f} define focus reliability.", 220),
+        ],
+        "drivers": drivers,
+        "safe_windows": safe_windows,
+        "constraints": constraints,
+        "mitigations": [
+            "Keep driving sessions short when runtime load or pressure signals rise.",
+            "Use rest breaks and route planning before high-focus travel blocks.",
+            "Avoid high-cognitive multitasking immediately before or during travel.",
+            "Favor consistent sleep windows before longer travel days.",
+        ],
+        "outlook": sanitize_text(
+            f"Layer {layers.get('style_layer')} indicates {layers.get('load_band')} operational load with nonlocal variability. "
+            "Adopt a conservative posture: reduce multitasking, avoid rushed departures, and prioritize low-load, high-stability windows.",
+            520,
+        ),
+        "confidence": clamp(0.48 + (0.18 * (1.0 - variability)) + (0.08 * (1.0 - load_score))),
+    }
 
 
 def quantum_rag_packet(handle: str, axes: Dict[str, float], colorwheel: Dict[str, Any]) -> Dict[str, Any]:
@@ -909,6 +1087,74 @@ def analyze_handle(handle: str) -> Dict[str, Any]:
         "tweet_to_color": colorwheel,
         "glass": f"linear-gradient(130deg, rgba({colorwheel['primary_rgb'][0]}, {colorwheel['primary_rgb'][1]}, {colorwheel['primary_rgb'][2]}, .33), rgba(106,190,255,.18))",
     }
+
+    life_opt_payload = {
+        "handle": result["handle"],
+        "overall": result["overall"],
+        "vibe": result["vibe"],
+        "axes": result["axes"],
+        "axis_ranked": [{"axis": k, "score": round(v, 4)} for k, v in sorted(result["axes"].items(), key=lambda kv: kv[1], reverse=True)],
+        "axis_top": sorted(result["axes"].items(), key=lambda kv: kv[1], reverse=True)[0][0] if result.get("axes") else "SR",
+        "axis_bottom": sorted(result["axes"].items(), key=lambda kv: kv[1])[0][0] if result.get("axes") else "HCS",
+        "reasoning": result["reasoning"],
+        "suggestions": result["suggestions"],
+        "future_simulations": result["future_simulations"],
+        "three_new_ideas": result["three_new_ideas"],
+        "quantum_insight": result["quantum_insight"],
+        "advanced_suggestion_tracks": result["advanced_suggestion_tracks"],
+        "date_vector": result["date_vector"],
+        "isolated_quantum_advice": result["isolated_quantum_advice"],
+        "risk_simulations": result["risk_simulations"],
+        "cognitive_insights": result["cognitive_insights"],
+        "color_resonance": result.get("color_resonance", []),
+        "lore_brief": result["lore_brief"],
+        "quantum_rag": quantum_rag,
+        "dynamic_prompt_layers": dynamic_layers,
+        "runtime_profile": {"cpu_percent": quantum_rag.get("cpu_percent"), "ram_percent": quantum_rag.get("ram_percent")},
+        "task": "Generate a Mermaid life optimization structure from the full output.",
+    }
+    life_opt_llm = llm_json(LIFE_OPTIMIZATION_MERMAID_PROMPT, life_opt_payload)
+    life_opt = fallback_life_optimization_mermaid(result)
+    if isinstance(life_opt_llm, dict):
+        life_opt["title"] = choose_text(life_opt_llm.get("title"), life_opt["title"], 60)
+        life_opt["summary"] = choose_text(life_opt_llm.get("summary"), life_opt["summary"], 260)
+        diagram = choose_text(life_opt_llm.get("diagram"), life_opt["diagram"], 2400)
+        if "```mermaid" not in diagram:
+            diagram = f"```mermaid\n{diagram}\n```"
+        life_opt["diagram"] = diagram
+    life_opt["diagram_html"] = mermaid_block_html(life_opt.get("diagram", ""))
+
+    vehicle_llm = llm_json(
+        VEHICLE_SAFETY_PROMPT,
+        {
+            "handle": result["handle"],
+            "axes": result["axes"],
+            "quantum_rag": quantum_rag,
+            "dynamic_prompt_layers": dynamic_layers,
+            "runtime_profile": {"cpu_percent": quantum_rag.get("cpu_percent"), "ram_percent": quantum_rag.get("ram_percent")},
+            "task": "Generate a conservative vehicle safety simulation scanner output.",
+        },
+    )
+    vehicle_scan = fallback_vehicle_safety_scan(axes, quantum_rag, dynamic_layers)
+    if isinstance(vehicle_llm, dict):
+        vehicle_scan["daily"] = normalized_band(vehicle_llm.get("daily"), vehicle_scan["daily"])
+        vehicle_scan["weekly"] = normalized_band(vehicle_llm.get("weekly"), vehicle_scan["weekly"])
+        vehicle_scan["monthly"] = normalized_band(vehicle_llm.get("monthly"), vehicle_scan["monthly"])
+        vehicle_scan["outlook"] = choose_text(vehicle_llm.get("outlook"), vehicle_scan["outlook"], 520)
+        vehicle_scan["confidence"] = clamp(vehicle_llm.get("confidence", vehicle_scan["confidence"]))
+        if isinstance(vehicle_llm.get("signals"), list):
+            vehicle_scan["signals"] = [sanitize_text(x, 220) for x in vehicle_llm.get("signals")[:4] if sanitize_text(x, 220)]
+        if isinstance(vehicle_llm.get("drivers"), list):
+            vehicle_scan["drivers"] = [sanitize_text(x, 220) for x in vehicle_llm.get("drivers")[:4] if sanitize_text(x, 220)]
+        if isinstance(vehicle_llm.get("safe_windows"), list):
+            vehicle_scan["safe_windows"] = [sanitize_text(x, 120) for x in vehicle_llm.get("safe_windows")[:4] if sanitize_text(x, 120)]
+        if isinstance(vehicle_llm.get("constraints"), list):
+            vehicle_scan["constraints"] = [sanitize_text(x, 200) for x in vehicle_llm.get("constraints")[:4] if sanitize_text(x, 200)]
+        if isinstance(vehicle_llm.get("mitigations"), list):
+            vehicle_scan["mitigations"] = [sanitize_text(x, 220) for x in vehicle_llm.get("mitigations")[:4] if sanitize_text(x, 220)]
+
+    result["life_optimization_structure"] = life_opt
+    result["vehicle_safety_simulation"] = vehicle_scan
     return result
 
 
@@ -930,6 +1176,145 @@ def to_markdown_html(text: Any, limit: int = 4000) -> Markup:
     for i, block in enumerate(math_blocks):
         html = html.replace(f"@@HF_MATH_{i}@@", block)
     return Markup(html)
+
+
+def extract_mermaid_source(diagram: Any) -> str:
+    raw = str(diagram or "")
+    fenced = re.search(r"```mermaid\\s*([\\s\\S]*?)```", raw, flags=re.I)
+    if fenced:
+        return fenced.group(1).strip()
+    generic = re.search(r"```\\s*([\\s\\S]*?)```", raw)
+    if generic:
+        return generic.group(1).strip()
+    return raw.strip()
+
+
+def _mermaid_is_safe(source: str) -> bool:
+    if not source:
+        return False
+    lowered = source.lower()
+    if "javascript:" in lowered or "%%{" in lowered:
+        return False
+    blocked = r"\b(click|href|tooltip|call|style|classdef|linkstyle|init)\b"
+    if re.search(blocked, lowered):
+        return False
+    return True
+
+
+def mermaid_block_html(diagram: Any, limit: int = 3200) -> Markup:
+    raw = extract_mermaid_source(diagram)[:limit]
+    cleaned = "".join(ch for ch in raw if ch == "\n" or 32 <= ord(ch) <= 126)
+    cleaned = cleaned.replace("javascript:", "")
+    if not _mermaid_is_safe(cleaned):
+        cleaned = "flowchart TD\n  A[Diagram blocked by safety filter]"
+    escaped = html.escape(cleaned)
+    return Markup(f"<pre><code class='language-mermaid'>{escaped}</code></pre>")
+
+
+def render_markdown_report(result: Dict[str, Any]) -> str:
+    lines = [
+        f"# Heartflow Report for @{result.get('handle', '')}",
+        "",
+        f"- Overall score: {result.get('overall')}%",
+        f"- Vibe: {result.get('vibe')}",
+        f"- Confidence: {result.get('confidence')}",
+        f"- Risk score: {result.get('risk_score')}",
+        f"- Tweets analyzed: {result.get('tweet_count')}",
+        "",
+        "## Summary",
+        result.get("reasoning", ""),
+        "",
+        "## Six Axes",
+    ]
+    axes = result.get("axes", {})
+    for axis, value in axes.items():
+        lines.append(f"- {axis}: {round(float(value) * 100, 1)}%")
+    lines.extend([
+        "",
+        "## Life Optimization Structure",
+        result.get("life_optimization_structure", {}).get("diagram", ""),
+        "",
+        "## Vehicle Safety Simulation",
+        f"- Daily: {result.get('vehicle_safety_simulation', {}).get('daily', 'n/a')}",
+        f"- Weekly: {result.get('vehicle_safety_simulation', {}).get('weekly', 'n/a')}",
+        f"- Monthly: {result.get('vehicle_safety_simulation', {}).get('monthly', 'n/a')}",
+    ])
+    vehicle = result.get("vehicle_safety_simulation", {})
+    if vehicle.get("drivers"):
+        lines.append("")
+        lines.append("### Drivers")
+        lines.extend(f"- {x}" for x in vehicle["drivers"])
+    if vehicle.get("safe_windows"):
+        lines.append("")
+        lines.append("### Safe Windows")
+        lines.extend(f"- {x}" for x in vehicle["safe_windows"])
+    if vehicle.get("constraints"):
+        lines.append("")
+        lines.append("### Constraints")
+        lines.extend(f"- {x}" for x in vehicle["constraints"])
+    if vehicle.get("mitigations"):
+        lines.append("")
+        lines.append("### Mitigations")
+        lines.extend(f"- {x}" for x in vehicle["mitigations"])
+    lines.extend([
+        "",
+        "## Quantum Insight",
+        f"- Field state: {result.get('quantum_insight', {}).get('field_state', '')}",
+        f"- Coherence: {result.get('quantum_insight', {}).get('coherence', '')}",
+        f"- Interference pattern: {result.get('quantum_insight', {}).get('interference_pattern', '')}",
+        f"- Phase-shift move: {result.get('quantum_insight', {}).get('phase_shift_move', '')}",
+        "",
+        "## Suggestions",
+    ])
+    for s in result.get("suggestions", [])[:8]:
+        lines.append(f"- {s}")
+    return "\n".join(lines).strip() + "\n"
+
+
+def themed_palette(page_kind: str) -> Dict[str, str]:
+    seed = hashlib.sha256(f"{page_kind}|{secrets.token_hex(8)}|{time.time_ns()}".encode()).digest()
+
+    def pick(i: int) -> str:
+        return f"{seed[i]:02x}{seed[i + 1]:02x}{seed[i + 2]:02x}"
+
+    a = pick(0)
+    b = pick(3)
+    c = pick(6)
+    d = pick(9)
+    e = pick(12)
+    return {
+        "bg1": f"#{a}",
+        "bg2": f"#{b}",
+        "bg3": f"#{c}",
+        "accent": f"#{d}",
+        "accent2": f"#{e}",
+        "glass": "rgba(255,255,255,.08)",
+        "glass_alt": "rgba(0,0,0,.24)",
+        "line": "rgba(255,255,255,.22)",
+        "page_tint": "rgba(255,255,255,.04)",
+    }
+
+
+def seo_meta(page_kind: str) -> Dict[str, str]:
+    base = {
+        "main": {
+            "title": "Heartflow | AI Signal Studio",
+            "description": "Heartflow analyzes public signals with encrypted storage, quantum-RAG style outputs, Mermaid diagrams, and MathJax-enhanced reports.",
+        },
+        "about": {
+            "title": "About Heartflow | AI Signal Studio",
+            "description": "Learn how Heartflow structures analysis, protects data, and presents readable results with MathJax and Mermaid rendering.",
+        },
+        "creators": {
+            "title": "Creators | Heartflow",
+            "description": "Heartflow creators and collaboration notes for people extending the app, its scoring pipeline, and its visualization layers.",
+        },
+        "dashboard": {
+            "title": "Heartflow Dashboard",
+            "description": "Heartflow dashboard for structured HF analysis, quantum-RAG outputs, and simulation-driven coaching.",
+        },
+    }
+    return base.get(page_kind, base["main"])
 
 
 ABOUT_MD = r"""
@@ -1049,18 +1434,39 @@ INFO_PAGE = """
 <head>
   <meta charset='utf-8'/>
   <meta name='viewport' content='width=device-width, initial-scale=1'/>
-  <title>Heartflow</title>
+  <title>{{ seo.title }}</title>
+  <meta name='description' content='{{ seo.description }}'/>
+  <meta property='og:title' content='{{ seo.title }}'/>
+  <meta property='og:description' content='{{ seo.description }}'/>
+  <meta property='og:type' content='website'/>
+  <meta name='twitter:card' content='summary_large_image'/>
   <style>
-    body{margin:0;font-family:Inter,system-ui,sans-serif;background:radial-gradient(circle at 10% 16%,rgba(255,99,169,.5) 0%,rgba(255,99,169,0) 33%),radial-gradient(circle at 84% 12%,rgba(102,133,255,.48) 0%,rgba(102,133,255,0) 32%),radial-gradient(circle at 14% 82%,rgba(54,214,196,.44) 0%,rgba(54,214,196,0) 34%),radial-gradient(circle at 92% 84%,rgba(255,183,88,.35) 0%,rgba(255,183,88,0) 28%),linear-gradient(152deg,#050913,#121a30 58%,#091126 100%);background-attachment:fixed;color:#eaf3ff}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:
+      radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--hf-accent) 55%, transparent) 0%, transparent 30%),
+      radial-gradient(circle at 84% 16%, color-mix(in srgb, var(--hf-accent2) 55%, transparent) 0%, transparent 28%),
+      radial-gradient(circle at 14% 82%, color-mix(in srgb, var(--hf-bg3) 42%, transparent) 0%, transparent 30%),
+      linear-gradient(152deg, var(--hf-bg1) 0%, var(--hf-bg2) 58%, var(--hf-bg3) 100%);background-attachment:fixed;color:#eaf3ff}
     .wrap{min-height:100vh;display:grid;place-items:center;padding:.8rem}
-    .card{width:min(1020px,98vw);border:1px solid rgba(255,255,255,.2);border-radius:20px;padding:1rem;background:rgba(8,14,28,.7);backdrop-filter:blur(14px)}
+    .card{width:min(1020px,98vw);border:1px solid var(--hf-line);border-radius:24px;padding:1rem;background:linear-gradient(180deg,var(--hf-glass),rgba(0,0,0,.18));backdrop-filter:blur(18px) saturate(140%);box-shadow:0 26px 90px rgba(0,0,0,.45)}
     .content{max-width:68ch;margin:0 auto}
     h1{margin:.2rem 0 .45rem 0;text-align:center;font-size:clamp(1.55rem,4.5vw,2.6rem);letter-spacing:.04em;text-transform:uppercase}
     h2{margin:1.35rem 0 .55rem;font-size:clamp(1.1rem,2.5vw,1.45rem)}
     h3{margin:1rem 0 .45rem;font-size:1.05rem}
     .sub{text-align:center;color:#cae0ff;margin-bottom:.7rem}
-    .nav{display:flex;justify-content:center;gap:.55rem;flex-wrap:wrap;margin-bottom:.45rem}
-    .nav a{color:#d8e8ff;text-decoration:none;border:1px solid rgba(255,255,255,.24);border-radius:999px;padding:.3rem .75rem;font-size:.92rem}
+    .hero{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(250px,.9fr);gap:1rem;align-items:stretch;margin-bottom:1rem}
+    .hero-panel{border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:1rem;background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03));box-shadow:0 18px 50px rgba(0,0,0,.25)}
+    .hero-kicker{font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;color:color-mix(in srgb, var(--hf-accent) 80%, #fff);margin-bottom:.35rem}
+    h1{margin:.1rem 0 .35rem;text-align:left;font-size:clamp(2.4rem,6vw,4.9rem);line-height:.98;letter-spacing:.02em;text-transform:none}
+    .sub{text-align:left;color:#e6f2ff;margin-bottom:.75rem;max-width:60ch;font-size:1.02rem}
+    .hero-copy p{margin:.45rem 0 0;line-height:1.7;color:#d7e7fb}
+    .hero-meta{display:flex;flex-wrap:wrap;gap:.45rem;margin-top:.85rem}
+    .hero-pill{display:inline-flex;align-items:center;gap:.35rem;padding:.38rem .72rem;border-radius:999px;border:1px solid rgba(255,255,255,.16);background:rgba(0,0,0,.16);font-size:.88rem;color:#f3f8ff}
+    .hero-visual{display:grid;gap:.65rem;align-content:start}
+    .hero-stat{border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:.82rem;background:rgba(0,0,0,.18);min-height:88px}
+    .hero-stat span{display:block;font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:#d7e6ff}
+    .hero-stat strong{display:block;font-size:1.2rem;margin-top:.2rem;color:#fff}
+    .nav{display:flex;justify-content:flex-start;gap:.55rem;flex-wrap:wrap;margin:.5rem 0 .65rem}
+    .nav a{color:#d8e8ff;text-decoration:none;border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:.34rem .82rem;font-size:.92rem;background:rgba(0,0,0,.12)}
     .content{border:1px solid rgba(255,255,255,.2);border-radius:12px;background:rgba(0,0,0,.2);padding:.8rem}
     .md > *:first-child{margin-top:0}
     .md > *:last-child{margin-bottom:0}
@@ -1077,19 +1483,74 @@ INFO_PAGE = """
     .md hr{border:0;border-top:1px solid rgba(255,255,255,.18);margin:1rem 0}
     .md code{background:rgba(255,255,255,.12);padding:.1rem .3rem;border-radius:6px;overflow-wrap:anywhere}
     .mjx-container{overflow-x:auto;overflow-y:hidden;margin:.5rem 0;max-width:100%}
+    .mermaid{overflow-x:auto;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:.75rem;margin:1rem 0}
     .md .callout{border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:.7rem .85rem;margin:.8rem 0;background:rgba(255,255,255,.05)}
     .md .callout h4{margin:0 0 .35rem;font-size:1rem}
     .md .callout p{margin:.35rem 0 0}
-    @media (max-width:900px){.card{width:98vw;padding:.8rem}.content{max-width:100%;padding:.75rem}.nav a{font-size:.88rem;padding:.28rem .66rem}}
+    body[data-page='main'] .hero-panel{min-height:100%}
+    body[data-page='main'] .content{max-width:100%}
+    body[data-page='main'] .card{max-width:1280px}
+    body[data-page='about'] .card{max-width:960px}
+    body[data-page='creators'] .card{max-width:1040px}
+    body[data-page='about'] .sub{color:#d8f3f7}
+    body[data-page='creators'] .sub{color:#f2e8ff}
+    body[data-page='about'] .nav a{border-color:rgba(108,229,255,.28)}
+    body[data-page='creators'] .nav a{border-color:rgba(255,183,88,.28)}
+    body[data-page='about'] .content{background:rgba(0,0,0,.18)}
+    body[data-page='creators'] .content{background:rgba(0,0,0,.24)}
+    @media (min-width:1200px){body[data-page='main'] .card{max-width:1340px}}
+    @media (max-width:1040px){.hero{grid-template-columns:1fr}.hero-copy{order:1}.hero-visual{order:2}}
+    @media (max-width:900px){.card{width:98vw;padding:.8rem}.content{max-width:100%;padding:.75rem}.nav a{font-size:.88rem;padding:.28rem .66rem}.hero{gap:.8rem}.hero-panel{padding:.85rem}h1{font-size:clamp(2rem,9vw,3rem)}.grid,.axis-explainer-grid{grid-template-columns:1fr}.btn{min-width:100%;font-size:1rem}}
   </style>
   <script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']],processEscapes:true,processEnvironments:true},options:{renderActions:{addMenu:[]}}};window.addEventListener('load',()=>{if(window.MathJax&&MathJax.typesetPromise){MathJax.typesetPromise();}});</script>
+  <script>
+    window.mermaid = { startOnLoad: false, theme: 'dark' };
+    window.addEventListener('load', () => {
+      if (!window.mermaid || !window.mermaid.run) return;
+      document.querySelectorAll('.md pre > code.language-mermaid, .md pre > code.mermaid').forEach((code) => {
+        const div = document.createElement('div');
+        div.className = 'mermaid';
+        div.textContent = code.textContent;
+        const pre = code.parentElement;
+        if (pre && pre.parentElement) pre.parentElement.replaceChild(div, pre);
+      });
+      window.mermaid.run({ querySelector: '.mermaid' });
+    });
+  </script>
   <script defer src='{{ url_for("static", filename="vendor/mathjax/es5/tex-mml-chtml.js") }}'></script>
+  <script defer src='{{ url_for("static", filename="vendor/mermaid/mermaid.min.js") }}'></script>
+  <script>
+    const hfSetLayout = () => {
+      const w = window.innerWidth;
+      const layout = w < 700 ? 'compact' : w < 1100 ? 'mid' : 'wide';
+      document.body.dataset.layout = layout;
+    };
+    window.addEventListener('resize', hfSetLayout, { passive: true });
+    window.addEventListener('load', hfSetLayout);
+  </script>
 </head>
-<body>
+<body data-page='{{ page_kind }}' style='--hf-bg1: {{ theme.bg1 }}; --hf-bg2: {{ theme.bg2 }}; --hf-bg3: {{ theme.bg3 }}; --hf-accent: {{ theme.accent }}; --hf-accent2: {{ theme.accent2 }}; --hf-glass: {{ theme.glass }}; --hf-line: {{ theme.line }};'>
   <div class='wrap'><section class='card'>
     <nav class='nav'><a href='/'>Home</a><a href='/about'>About</a><a href='/creators'>Creators</a></nav>
-    <h1>Heartflow</h1>
-    <p class='sub'>Secure AI signal studio · encrypted storage · quantum-inspired scoring</p>
+    <div class='hero'>
+      <div class='hero-panel hero-copy'>
+        <div class='hero-kicker'>{{ seo.title }}</div>
+        <h1>Heartflow</h1>
+        <p class='sub'>Secure AI signal studio · encrypted storage · quantum-inspired scoring</p>
+        <p>Heartflow turns public text into a cinematic, inspectable analysis surface. The UI shifts by route and window size so the main console feels like a command deck while About and Creators read like polished documentation.</p>
+        <div class='hero-meta'>
+          <span class='hero-pill'>MathJax-ready</span>
+          <span class='hero-pill'>Mermaid diagrams</span>
+          <span class='hero-pill'>Randomized palette</span>
+          <span class='hero-pill'>Responsive by design</span>
+        </div>
+      </div>
+      <div class='hero-visual'>
+        <div class='hero-stat'><span>Current View</span><strong>{{ page_kind|capitalize }}</strong></div>
+        <div class='hero-stat'><span>Layout Mode</span><strong id='hf-layout'>Adaptive</strong></div>
+        <div class='hero-stat'><span>Palette</span><strong>Fresh each load</strong></div>
+      </div>
+    </div>
     <article class='md content'>{{ content_html|safe }}</article>
   </section></div>
 </body>
@@ -1138,9 +1599,24 @@ PAGE = """
     @media (max-width:900px){.grid,.axis-explainer-grid{grid-template-columns:1fr}.btn{min-width:100%;font-size:1rem}}
   </style>
   <script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']],processEscapes:true,processEnvironments:true}};window.addEventListener('load',()=>{if(window.MathJax&&MathJax.typesetPromise){MathJax.typesetPromise();}});</script>
+  <script>
+    window.mermaid = { startOnLoad: false, theme: 'dark' };
+    window.addEventListener('load', () => {
+      if (!window.mermaid || !window.mermaid.run) return;
+      document.querySelectorAll('.markdown pre > code.language-mermaid, .markdown pre > code.mermaid').forEach((code) => {
+        const div = document.createElement('div');
+        div.className = 'mermaid';
+        div.textContent = code.textContent;
+        const pre = code.parentElement;
+        if (pre && pre.parentElement) pre.parentElement.replaceChild(div, pre);
+      });
+      window.mermaid.run({ querySelector: '.mermaid' });
+    });
+  </script>
   <script defer src='{{ url_for("static", filename="vendor/mathjax/es5/tex-mml-chtml.js") }}'></script>
+  <script defer src='{{ url_for("static", filename="vendor/mermaid/mermaid.min.js") }}'></script>
 </head>
-<body>
+<body data-page='{{ page_kind }}' style='--hf-bg1: {{ theme.bg1 }}; --hf-bg2: {{ theme.bg2 }}; --hf-bg3: {{ theme.bg3 }}; --hf-accent: {{ theme.accent }}; --hf-accent2: {{ theme.accent2 }}; --hf-glass: {{ theme.glass }}; --hf-line: {{ theme.line }};'>
 <div class='wrap'>
   <section class='card' {% if result %}style="--hf-glass: {{ result.glass }};"{% endif %}>
     <nav class='nav'><a href='/'>Home</a><a href='/about'>About</a><a href='/creators'>Creators</a></nav>
@@ -1159,6 +1635,11 @@ PAGE = """
     <div class='panel'>
       <h2>@{{ result.handle }} · {{ result.vibe }}</h2>
       <p class='meta'>Overall: <strong>{{ result.overall }}%</strong> · confidence={{ result.confidence }} · risk={{ result.risk_score }} · tweets={{ result.tweet_count }}</p>
+      <form method='post' action='/report.md' style='margin:.6rem 0 1rem'>
+        <input type='hidden' name='csrf_token' value='{{ csrf_token }}'/>
+        <input type='hidden' name='handle' value='{{ result.handle }}'/>
+        <button class='btn btn-outline-light btn-sm' type='submit'>Download Markdown Report</button>
+      </form>
       <div class='markdown'>{{ result.reasoning_html|safe }}</div>
       <div class='panel' style='margin-top:.8rem;background:rgba(255,255,255,.06)'>
         <h3>6-Axis Explainer</h3>
@@ -1201,6 +1682,28 @@ PAGE = """
       <p><strong>Interference pattern:</strong> {{ result.quantum_insight.interference_pattern }}</p>
       <p><strong>Phase-shift move:</strong> {{ result.quantum_insight.phase_shift_move }}</p>
     </div>
+
+    {% if result.life_optimization_structure %}
+    <div class='panel'>
+      <h3>{{ result.life_optimization_structure.title }}</h3>
+      <p class='meta'>{{ result.life_optimization_structure.summary }}</p>
+      <div class='markdown'>{{ result.life_optimization_structure.diagram_html|safe }}</div>
+    </div>
+    {% endif %}
+
+    {% if result.vehicle_safety_simulation %}
+    <div class='panel'>
+      <h3>Vehicle Safety Simulation Scanner</h3>
+      <p><strong>Daily:</strong> {{ result.vehicle_safety_simulation.daily|upper }} · <strong>Weekly:</strong> {{ result.vehicle_safety_simulation.weekly|upper }} · <strong>Monthly:</strong> {{ result.vehicle_safety_simulation.monthly|upper }}</p>
+      <p><strong>Confidence:</strong> {{ (result.vehicle_safety_simulation.confidence * 100)|round(1) }}%</p>
+      <p><strong>Outlook:</strong> {{ result.vehicle_safety_simulation.outlook }}</p>
+      {% if result.vehicle_safety_simulation.drivers %}<p><strong>Drivers:</strong></p><ul>{% for d in result.vehicle_safety_simulation.drivers %}<li>{{ d }}</li>{% endfor %}</ul>{% endif %}
+      {% if result.vehicle_safety_simulation.safe_windows %}<p><strong>Safe windows:</strong></p><ul>{% for s in result.vehicle_safety_simulation.safe_windows %}<li>{{ s }}</li>{% endfor %}</ul>{% endif %}
+      {% if result.vehicle_safety_simulation.constraints %}<p><strong>Constraints:</strong></p><ul>{% for c in result.vehicle_safety_simulation.constraints %}<li>{{ c }}</li>{% endfor %}</ul>{% endif %}
+      {% if result.vehicle_safety_simulation.signals %}<ul>{% for s in result.vehicle_safety_simulation.signals %}<li>{{ s }}</li>{% endfor %}</ul>{% endif %}
+      {% if result.vehicle_safety_simulation.mitigations %}<p><strong>Mitigations:</strong></p><ul>{% for m in result.vehicle_safety_simulation.mitigations %}<li>{{ m }}</li>{% endfor %}</ul>{% endif %}
+    </div>
+    {% endif %}
 
     {% if result.advanced_suggestion_tracks %}<div class='panel'><h3>Advanced Suggestion Tracks</h3>{% for t in result.advanced_suggestion_tracks %}<p><strong>{{t.track}} (P{{t.priority}}):</strong> {{t.guidance}}</p>{% endfor %}</div>{% endif %}
 
@@ -1249,17 +1752,17 @@ PAGE = """
 @app.get("/")
 def index():
     prefill = sanitize_text(request.args.get('handle', ''), 15)
-    return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=None, handle_prefill=prefill, axis_explainers=AXIS_EXPLAINERS)
+    return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=None, handle_prefill=prefill, axis_explainers=AXIS_EXPLAINERS, page_kind="main", theme=themed_palette("main"), seo=seo_meta("main"))
 
 
 @app.get("/about")
 def about_page():
-    return render_template_string(INFO_PAGE, content_html=to_markdown_html(ABOUT_MD, 6000))
+    return render_template_string(INFO_PAGE, content_html=to_markdown_html(ABOUT_MD, 6000), page_kind="about", theme=themed_palette("about"), seo=seo_meta("about"))
 
 
 @app.get("/creators")
 def creators_page():
-    return render_template_string(INFO_PAGE, content_html=to_markdown_html(CREATORS_MD, 6000))
+    return render_template_string(INFO_PAGE, content_html=to_markdown_html(CREATORS_MD, 6000), page_kind="creators", theme=themed_palette("creators"), seo=seo_meta("creators"))
 
 
 @app.post("/analyze")
@@ -1274,18 +1777,41 @@ def analyze():
             error="Session validation expired. Please submit again.",
             handle_prefill=request.form.get('handle', ''),
             axis_explainers=AXIS_EXPLAINERS,
+            page_kind="main",
+            theme=themed_palette("main"),
+            seo=seo_meta("main"),
         )
     if not rate_limit_ok(client_fingerprint()):
-        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error="Rate limit exceeded. Please wait and retry.", handle_prefill=request.form.get('handle', ''), axis_explainers=AXIS_EXPLAINERS)
+        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error="Rate limit exceeded. Please wait and retry.", handle_prefill=request.form.get('handle', ''), axis_explainers=AXIS_EXPLAINERS, page_kind="main", theme=themed_palette("main"), seo=seo_meta("main"))
     try:
         handle = sanitize_handle(request.form.get("handle", ""))
         result = analyze_handle(handle)
         save_analysis(handle, result)
-        return render_template_string(PAGE, csrf_token=csrf_token(), result=result, recent=recent_analyses(), error=None, handle_prefill=handle, axis_explainers=AXIS_EXPLAINERS)
+        return render_template_string(PAGE, csrf_token=csrf_token(), result=result, recent=recent_analyses(), error=None, handle_prefill=handle, axis_explainers=AXIS_EXPLAINERS, page_kind="main", theme=themed_palette("main"), seo=seo_meta("main"))
     except ComplianceError as exc:
-        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=sanitize_text(exc, 300), handle_prefill=request.form.get('handle', ''), axis_explainers=AXIS_EXPLAINERS)
+        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=sanitize_text(exc, 300), handle_prefill=request.form.get('handle', ''), axis_explainers=AXIS_EXPLAINERS, page_kind="main", theme=themed_palette("main"), seo=seo_meta("main"))
     except Exception as exc:
-        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=sanitize_text(exc, 300), handle_prefill=request.form.get('handle', ''), axis_explainers=AXIS_EXPLAINERS)
+        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=sanitize_text(exc, 300), handle_prefill=request.form.get('handle', ''), axis_explainers=AXIS_EXPLAINERS, page_kind="main", theme=themed_palette("main"), seo=seo_meta("main"))
+
+
+@app.post("/report.md")
+def report_md():
+    if not csrf_ok(request.form.get("csrf_token", "")):
+        return make_response("Session validation expired. Please retry from the main page.\n", 400)
+    if not rate_limit_ok(f"report:{client_fingerprint()}"):
+        return make_response("Report generation rate limit exceeded. Please wait and retry.\n", 429)
+    try:
+        handle = sanitize_handle(request.form.get("handle", ""))
+        result = analyze_handle(handle)
+        markdown_report = render_markdown_report(result)
+        resp = make_response(markdown_report)
+        resp.headers["Content-Type"] = "text/markdown; charset=utf-8"
+        resp.headers["Content-Disposition"] = f'attachment; filename="heartflow-{handle}.md"'
+        return resp
+    except ComplianceError as exc:
+        return make_response(f"{sanitize_text(exc, 300)}\n", 403)
+    except Exception as exc:
+        return make_response(f"{sanitize_text(exc, 300)}\n", 500)
 
 
 @app.get("/healthz")

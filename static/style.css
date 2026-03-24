@@ -3,14 +3,17 @@
   --bg2: #1f2a44;
   --glass: rgba(255, 255, 255, 0.1);
   --line: rgba(255, 255, 255, 0.25);
+  --surface: rgba(0, 0, 0, 0.18);
+  --surface-strong: rgba(0, 0, 0, 0.28);
+  --accent: #6ce5ff;
 }
 * { box-sizing: border-box; }
 body {
   margin: 0;
   min-height: 100vh;
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  background: radial-gradient(circle at 10% 20%, #5b7bff 0%, transparent 35%),
-              radial-gradient(circle at 90% 80%, #53d0ff 0%, transparent 30%),
+  background: radial-gradient(circle at 10% 20%, color-mix(in srgb, var(--palette-accent, #5b7bff) 58%, transparent) 0%, transparent 35%),
+              radial-gradient(circle at 90% 80%, color-mix(in srgb, var(--palette-accent2, #53d0ff) 58%, transparent) 0%, transparent 30%),
               linear-gradient(125deg, var(--bg1), var(--bg2));
   color: #eaf3ff;
 }
@@ -116,6 +119,118 @@ pre { white-space: pre-wrap; color: #dfefff; }
   background: linear-gradient(90deg, #58d3ff, #7a83ff);
   border: none;
   box-shadow: 0 10px 28px rgba(73, 147, 255, .35);
+}
+
+body[data-page='dashboard'] .glass-card {
+  max-width: 1160px;
+}
+body[data-page='dashboard'] {
+  --palette-accent: #5b7bff;
+  --palette-accent2: #53d0ff;
+}
+body[data-page='dashboard'] .glass-card {
+  background-image: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02)), linear-gradient(130deg, color-mix(in srgb, var(--palette-accent, #5b7bff) 34%, transparent), color-mix(in srgb, var(--palette-accent2, #53d0ff) 18%, transparent));
+}
+body[data-layout='compact'] .glass-card {
+  border-radius: 16px;
+}
+body[data-layout='compact'] .title {
+  font-size: clamp(1.65rem, 7vw, 2.35rem);
+}
+body[data-layout='compact'] .subtitle {
+  font-size: .96rem;
+}
+body[data-layout='mid'] .glass-card {
+  max-width: 1040px;
+}
+body[data-layout='wide'] .glass-card {
+  max-width: 1220px;
+}
+
+body[data-page='about'] .glass-card,
+body[data-page='creators'] .glass-card {
+  background-image: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02));
+}
+
+body[data-page='about'] .subtitle {
+  color: #d4eff6;
+}
+
+body[data-page='creators'] .subtitle {
+  color: #f0e1ff;
+}
+
+body[data-page='dashboard'] .quantum-box {
+  border-color: rgba(108,229,255,.25);
+}
+
+body[data-layout='compact'] .grid,
+body[data-layout='compact'] .rag-grid,
+body[data-layout='compact'] .tracks-grid,
+body[data-layout='compact'] .axis-explainer-grid {
+  grid-template-columns: 1fr;
+}
+
+body[data-layout='compact'] .mini-actions form {
+  flex: 1 1 100%;
+}
+
+body[data-layout='compact'] .trainer-btn {
+  min-width: 100%;
+}
+
+body[data-layout='compact'] .nav-tabs {
+  overflow-x: auto;
+  white-space: nowrap;
+  flex-wrap: nowrap;
+}
+
+body[data-page='about'] .content,
+body[data-page='creators'] .content {
+  line-height: 1.7;
+}
+
+body[data-page='main'] .hero-panel {
+  border-color: rgba(255,255,255,.18);
+}
+
+body[data-page='main'] .hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(220px, .85fr);
+  gap: 1rem;
+}
+
+body[data-page='main'] .hero-visual {
+  display: grid;
+  gap: .65rem;
+}
+
+body[data-page='main'] .hero-stat {
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 16px;
+  padding: .85rem;
+  background: rgba(0,0,0,.18);
+}
+
+body[data-page='main'] .hero-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: .35rem .7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.15);
+  background: rgba(0,0,0,.14);
+  margin: .2rem .35rem 0 0;
+}
+
+body[data-page='about'] .content h2,
+body[data-page='creators'] .content h2 {
+  letter-spacing: .01em;
+}
+
+@media (max-width: 1040px) {
+  body[data-page='main'] .hero {
+    grid-template-columns: 1fr;
+  }
 }
 .loading-indicator {
   margin-top: .75rem;

@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='vendor/orbitron/700.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
+<body data-page="dashboard">
 <main class="hf-shell">
   <section class="glass-card" {% if result %}style="--hf-glass: {{ result.glass }};"{% endif %}>
     <h1 class="title">HeartFlow Trainer Console</h1>
@@ -264,6 +264,12 @@
 </main>
 <script src="{{ bootstrap_js.src }}" integrity="{{ bootstrap_js.integrity }}" crossorigin="anonymous"></script>
 <script>
+  const palette = () => {
+    const hue = Math.floor(Math.random() * 360);
+    const hue2 = (hue + 60 + Math.floor(Math.random() * 120)) % 360;
+    document.body.style.setProperty('--palette-accent', `hsl(${hue} 92% 66%)`);
+    document.body.style.setProperty('--palette-accent2', `hsl(${hue2} 92% 62%)`);
+  };
   document.querySelectorAll("form[action$='/analyze']").forEach((form)=>{
     form.addEventListener("submit", ()=>{
       const el=document.getElementById("loading-indicator");
@@ -275,6 +281,16 @@
       }
     });
   });
+  palette();
+</script>
+<script>
+  const hfSetLayout = () => {
+    const w = window.innerWidth;
+    const layout = w < 700 ? 'compact' : w < 1100 ? 'mid' : 'wide';
+    document.body.dataset.layout = layout;
+  };
+  window.addEventListener('resize', hfSetLayout, { passive: true });
+  window.addEventListener('load', hfSetLayout);
 </script>
 </body>
 </html>
