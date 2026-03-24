@@ -1344,6 +1344,7 @@ Heartflow turns public tweet text into a structured profile, then translates tha
 - AES-GCM encrypted SQLite storage.
 - Configurable strict X API compliance guardrails.
 - Sanitized markdown output for any generated text that reaches the page.
+- Heartflow requires a valid `TWITTER_BEARER_TOKEN` to fetch public X/Twitter data. Without it, the app will not run in compliant tweet-analysis mode.
 
 ## Design principles
 - Prefer readable output over raw model chatter.
@@ -1707,7 +1708,7 @@ INFO_PAGE = """
     body[data-page='main'] .hero-panel{min-height:100%}
     body[data-page='main'] .content{max-width:100%}
     body[data-page='main'] .card{max-width:1280px}
-    body[data-page='about'] .card{max-width:960px}
+    body[data-page='about'] .card{max-width:1080px}
     body[data-page='creators'] .card{max-width:1040px}
     body[data-page='about'] .sub{color:#d8f3f7}
     body[data-page='creators'] .sub{color:#f2e8ff}
@@ -1755,7 +1756,6 @@ INFO_PAGE = """
       <div class='hero-panel hero-copy'>
         <div class='hero-kicker'>{{ seo.title }}</div>
         <h1>Heartflow</h1>
-        <p class='sub'>Secure AI signal studio · encrypted storage · quantum-inspired scoring</p>
         <p>Heartflow turns public text into a cinematic, inspectable analysis surface. The UI shifts by route and window size so the main console feels like a command deck while About and Creators read like polished documentation.</p>
         <div class='hero-meta'>
           <span class='hero-pill'>MathJax-ready</span>
@@ -1840,7 +1840,6 @@ PAGE = """
   <section class='card' {% if result %}style="--hf-glass: {{ result.glass }};"{% endif %}>
     <nav class='nav'><a href='/'>Home</a><a href='/about'>About</a><a href='/creators'>Creators</a><a href='/story'>Story</a></nav>
     <h1>Heartflow</h1>
-    <p class='sub'>Secure AI signal studio · encrypted storage · quantum-inspired scoring</p>
     {% if error %}<div class='panel' style='border-color:#ff9a9a'>{{ error }}</div>{% endif %}
 
     <form method='post' action='/analyze' id='f'>
