@@ -7,7 +7,7 @@ This app now runs as a **single-file `main.py`** Flask application with inline U
 - AES-GCM encrypted SQLite storage (`hf_secure.db`)
 - Boot-time key derivation from `ENCRYPTION_PASSPHRASE` + PBKDF2 salt
 - Extra entropy from `psutil` for key diversification
-- CSRF protection + hardened security headers
+- CSRF protection + rate limiting + hardened security headers
 
 ## Required env vars
 - `ENCRYPTION_PASSPHRASE` (**required**)
@@ -45,3 +45,7 @@ gunicorn main:app -b 0.0.0.0:${PORT:-3000} -w ${WEB_CONCURRENCY:-2} -k gthread -
 - `/` Home analyzer dashboard
 - `/about` markdown + equations
 - `/creators` markdown + equations
+
+## Notes
+- Intent-gate/captcha and actor-type (human/bot) flows were removed.
+- Google OAuth routes were removed.

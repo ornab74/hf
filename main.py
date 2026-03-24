@@ -70,7 +70,6 @@ RATE_LIMIT_PER_MIN = int(os.getenv("HF_RATE_LIMIT_PER_MIN", "8"))
 RATE_LIMIT_BURST_10M = int(os.getenv("HF_RATE_LIMIT_BURST_10M", "30"))
 RATE_LIMIT_STATE: Dict[str, deque] = defaultdict(deque)
 RATE_LOCK = Lock()
-CAPTCHA_TTL_SECONDS = int(os.getenv("HF_CAPTCHA_TTL_SECONDS", "600"))
 
 
 def request_timeout() -> httpx.Timeout:
@@ -79,6 +78,41 @@ def request_timeout() -> httpx.Timeout:
 
 class ComplianceError(RuntimeError):
     """Raised when a request would violate X API compliance guardrails."""
+
+
+USERNAME_MIN_LENGTH = 3
+USERNAME_MAX_LENGTH = 64
+USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def normalize_username(username: str) -> str:
+    if username is None:
+        return ""
+    return str(username).strip()
+
+
+def validate_username_policy(username: str) -> tuple[bool, str]:
+    username = normalize_username(username)
+    if len(username) < USERNAME_MIN_LENGTH or len(username) > USERNAME_MAX_LENGTH:
+        return False, f"Username must be between {USERNAME_MIN_LENGTH} and {USERNAME_MAX_LENGTH} characters."
+    if not USERNAME_RE.fullmatch(username):
+        return False, "Username may only include letters, numbers, dots, underscores, and hyphens."
+    return True, ""
+
+
+def validate_password_strength(password: Any) -> bool:
+    if not isinstance(password, str):
+        return False
+    if len(password) < 12 or len(password) > 256:
+        return False
+    if not re.search(r"[A-Z]", password):
+        return False
+    if not re.search(r"[a-z]", password):
+        return False
+    if not re.search(r"[0-9]", password):
+        return False
+    return True
+
 
 def write_group_for_payload(handle: str) -> str:
     vm = psutil.virtual_memory().percent
@@ -163,6 +197,15 @@ def init_db() -> None:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY,
+            username TEXT UNIQUE NOT NULL
+        )
+        """
+    )
+
     existing_cols = {r[1] for r in conn.execute("PRAGMA table_info(analyses)").fetchall()}
     if "write_group" not in existing_cols:
         conn.execute("ALTER TABLE analyses ADD COLUMN write_group TEXT NOT NULL DEFAULT 'red'")
@@ -263,6 +306,11 @@ def csrf_ok(token: str) -> bool:
 
 
 
+def client_fingerprint() -> str:
+    hdr = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+    ip = hdr or request.remote_addr or "unknown"
+    ua = request.headers.get("User-Agent", "unknown")[:160]
+    return f"{ip}|{ua}"
 
 def client_fingerprint() -> str:
     hdr = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
@@ -283,136 +331,23 @@ def rate_limit_ok(key: str) -> bool:
         q.append(now)
         return True
 
-
-CAPTCHA_QUESTIONS = [
-    "What is your dream for humanity?",
-    "How would you reduce harm in online discourse?",
-    "What does responsible innovation mean to you?",
-    "How can powerful systems stay aligned with human wellbeing?",
-]
-
-GATE_PROMPT = """
-You are HeartFlow Intent Gate (high-recall helpfulness filter).
-Classify intent text as safe unless there is clear malicious intent.
-
-Decision policy:
-- Output unsafe ONLY when there is explicit intent for harm, fraud, malware, violence, exploitation, or coercion.
-- If uncertain, ambiguous, philosophical, emotional, brief, or awkwardly written, return safe.
-- Do not punish grammar, tone, or style.
-- Use the quantum context only as secondary metadata.
-
-Context provided:
-- pennylane/psutil/rgb quantum RAG gate packet
-- Quantum State: top_states + phase signature + entropy + cpu/ram
-
-Return exactly one lowercase token: safe or unsafe.
-"""
-
-
-def captcha_quantum_state(question: str, answer: str) -> Dict[str, Any]:
-    seed = hashlib.sha256(f"{question}|{answer}|{time.time_ns()}".encode()).digest()
-    dev = qml.device("default.qubit", wires=2)
-    a = (seed[0] / 255.0) * math.pi
-    b = (seed[1] / 255.0) * math.pi
-
-    @qml.qnode(dev)
-    def circuit(x, y):
-        qml.Hadamard(wires=0)
-        qml.RX(x, wires=0)
-        qml.RY(y, wires=1)
-        qml.CNOT(wires=[0, 1])
-        return qml.state()
-
-    st = circuit(a, b)
-    probs = [float(abs(z) ** 2) for z in st]
-    top_idx = sorted(range(len(probs)), key=lambda i: probs[i], reverse=True)[:2]
-    rgb = [seed[2], seed[3], seed[4]]
-    return {
-        "top_states": [{"basis": format(i, "02b"), "prob": round(probs[i], 6)} for i in top_idx],
-        "phase": [round(float(getattr(z, "imag", 0.0)), 6) for z in st[:2]],
-        "entropy": round(float(-sum((p * (0.0 if p <= 1e-12 else math.log(p, 2))) for p in probs)), 6),
-        "cpu": psutil.cpu_percent(interval=0.0),
-        "ram": psutil.virtual_memory().percent,
-        "rgb": rgb,
-    }
-
-
-def llm_gate_verdict(question: str, answer: str, qstate: Dict[str, Any]) -> str:
-    low = (answer or "").lower()
-    hard_bad = [
-        "kill", "murder", "attack", "bomb", "shoot", "harm", "violence", "terror",
-        "malware", "ransomware", "exploit", "phish", "fraud", "scam", "coerce",
-    ]
-    heuristic = "unsafe" if any(w in low for w in hard_bad) else "safe"
-
-    if not OPENAI_API_KEY:
-        return heuristic
-
-    payload = {
-        "question": question,
-        "answer": sanitize_text(answer, 220),
-        "quantum_rag_gate": qstate,
-        "Quantum State": qstate,
-    }
-    req = {
-        "model": HF_OPENAI_MODEL,
-        "messages": [
-            {"role": "system", "content": GATE_PROMPT},
-            {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
-        ],
-        "temperature": 0.0,
-        "max_tokens": 6,
-    }
-    try:
-        with httpx.Client(timeout=request_timeout()) as client:
-            r = client.post(
-                f"{HF_OPENAI_BASE_URL.rstrip('/')}/chat/completions",
-                headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
-                json=req,
-            )
-            r.raise_for_status()
-            txt = (r.json().get("choices", [{}])[0].get("message", {}).get("content", "") or "").strip().lower()
-            if "unsafe" in txt:
-                return "unsafe"
-            if "safe" in txt:
-                return "safe"
-            return heuristic
-    except Exception:
-        return heuristic
-
-
-def issue_captcha() -> Dict[str, str]:
-    cid = secrets.token_urlsafe(10)
-    question = CAPTCHA_QUESTIONS[secrets.randbelow(len(CAPTCHA_QUESTIONS))]
-    bucket = session.get("captcha_bucket", {})
-    bucket[cid] = {"question": question, "ts": time.time()}
-    fresh = {k: v for k, v in bucket.items() if time.time() - float(v.get("ts", 0)) <= CAPTCHA_TTL_SECONDS}
-    session["captcha_bucket"] = fresh
-    return {"id": cid, "prompt": f"Intent gate: {question}", "max_chars": 220}
-
-
-def captcha_ok(captcha_id: str, answer: str) -> bool:
-    bucket = session.get("captcha_bucket", {})
-    row = bucket.get(captcha_id)
-    if not row:
-        return False
-    question = str(row.get("question", ""))
-    bucket.pop(captcha_id, None)
-    session["captcha_bucket"] = bucket
-    clean = sanitize_text(answer, 220)
-    if len(clean) < 12:
-        return False
-    qstate = captcha_quantum_state(question, clean)
-    verdict = llm_gate_verdict(question, clean, qstate)
-    session["last_gate_verdict"] = verdict
-    return verdict == "safe"
-
 def sanitize_text(v: Any, n: int = 320) -> str:
     raw = str(v or "")
     cleaned = "".join(ch for ch in raw if ch == "\n" or 32 <= ord(ch) <= 126)
     cleaned = cleaned.replace("<", "").replace(">", "").replace("javascript:", "")
     return cleaned.strip()[:n]
 
+def rate_limit_ok(key: str) -> bool:
+    now = time.time()
+    with RATE_LOCK:
+        q = RATE_LIMIT_STATE[key]
+        while q and now - q[0] > 600:
+            q.popleft()
+        in_last_min = sum(1 for t in q if now - t <= 60)
+        if in_last_min >= RATE_LIMIT_PER_MIN or len(q) >= RATE_LIMIT_BURST_10M:
+            return False
+        q.append(now)
+        return True
 
 def sanitize_handle(v: str) -> str:
     h = (v or "").strip().lstrip("@").strip()
@@ -420,6 +355,12 @@ def sanitize_handle(v: str) -> str:
         raise ValueError("Handle must be 1-15 chars of letters, numbers, underscore.")
     return h
 
+CAPTCHA_QUESTIONS = [
+    "What is your dream for humanity?",
+    "How would you reduce harm in online discourse?",
+    "What does responsible innovation mean to you?",
+    "How can powerful systems stay aligned with human wellbeing?",
+]
 
 # ---- core scoring ----
 def _require_x_api_access() -> None:
@@ -694,14 +635,6 @@ def normalized_band(value: Any, fallback: str = "medium") -> str:
     return v if v in {"low", "medium", "high"} else fallback
 
 
-def bot_depoison_advice(handle: str, axes: Dict[str, float], layers: Dict[str, Any]) -> List[str]:
-    return [
-        sanitize_text(f"@{handle}: declare objective + data source + uncertainty for each automated message to reduce manipulative drift.", 280),
-        sanitize_text("Run a toxic-pattern filter pass before publish: remove absolutist, inflammatory, or dehumanizing framing.", 280),
-        sanitize_text(f"Use layer {layers.get('style_layer')} for throttle discipline: 1 high-signal post per cycle, then wait for feedback.", 280),
-        sanitize_text("Attach a corrective protocol: if factual error detected, post correction within one cycle and pin update.", 280),
-    ]
-
 def derive_cognitive_insights(tweets: List[str], axes: Dict[str, float]) -> List[Dict[str, str]]:
     blob = " ".join(tweets).lower()
     urgency = any(k in blob for k in ["now", "urgent", "immediately", "asap"])
@@ -765,7 +698,7 @@ def deterministic_risk_simulations(axes: Dict[str, float], quantum_rag: Dict[str
     }
 
 
-def analyze_handle(handle: str, actor_type: str = "human") -> Dict[str, Any]:
+def analyze_handle(handle: str) -> Dict[str, Any]:
     tweets = fetch_recent_tweets(handle)
     base_axes = deterministic_axes(tweets)
     colorwheel = entropic_colorwheel(base_axes)
@@ -798,7 +731,6 @@ def analyze_handle(handle: str, actor_type: str = "human") -> Dict[str, Any]:
     risk_fallback = deterministic_risk_simulations(axes, quantum_rag, dynamic_layers)
     cognitive_fallback = derive_cognitive_insights(tweets, axes)
     lore_fallback = generate_lore_brief(handle, axes, dynamic_layers, quantum_rag)
-    is_bot = sanitize_text(actor_type, 12).lower() == "bot"
 
     suggestions = [sanitize_text(x, 420) for x in (llm.get("suggestions") or [])[:10] if sanitize_text(x, 420)]
     if not suggestions:
@@ -938,8 +870,6 @@ def analyze_handle(handle: str, actor_type: str = "human") -> Dict[str, Any]:
         ],
         "lore_brief": choose_text(llm.get("lore_brief"), lore_fallback, 1500),
         "lore_brief_html": to_markdown_html(choose_text(llm.get("lore_brief"), lore_fallback, 1500), 1800),
-        "actor_type": "bot" if is_bot else "human",
-        "bot_advice": [sanitize_text(x, 280) for x in ((llm.get("bot_advice") if is_bot else []) or bot_depoison_advice(handle, axes, dynamic_layers))[:6]] if is_bot else [],
         "quantum_rag": quantum_rag,
         "dynamic_prompt_layers": dynamic_layers,
         "tweet_count": len(tweets),
@@ -970,7 +900,7 @@ Heartflow analyzes public tweet text and returns structured guidance.
 - You get practical suggestions, risk outlooks, and simulation notes.
 
 ## Security and data
-- CSRF + rate limiting + intent gate.
+- CSRF + rate limiting.
 - AES-GCM encrypted SQLite storage.
 - Configurable strict X API compliance.
 
@@ -1006,14 +936,18 @@ INFO_PAGE = """
   <meta name='viewport' content='width=device-width, initial-scale=1'/>
   <title>Heartflow</title>
   <style>
-    body{margin:0;font-family:Inter,system-ui,sans-serif;background:radial-gradient(circle at 12% 18%,rgba(255,92,170,.52) 0%,rgba(255,92,170,0) 36%),radial-gradient(circle at 82% 14%,rgba(93,129,255,.5) 0%,rgba(93,129,255,0) 34%),radial-gradient(circle at 20% 84%,rgba(52,214,189,.45) 0%,rgba(52,214,189,0) 36%),radial-gradient(circle at 90% 82%,rgba(255,173,95,.4) 0%,rgba(255,173,95,0) 30%),linear-gradient(150deg,#070912,#131c33 58%,#0a1326 100%);background-attachment:fixed;color:#eaf3ff}
-    .wrap{min-height:100vh;display:grid;place-items:center;padding:1rem}
-    .card{width:min(900px,96vw);border:1px solid rgba(255,255,255,.18);border-radius:18px;padding:1rem 1.1rem;background:rgba(7,12,24,.7);backdrop-filter:blur(10px)}
-    .nav{display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:.8rem}
-    .nav a{color:#d9e9ff;text-decoration:none;border:1px solid rgba(255,255,255,.2);padding:.35rem .7rem;border-radius:999px}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:radial-gradient(circle at 10% 16%,rgba(255,99,169,.5) 0%,rgba(255,99,169,0) 33%),radial-gradient(circle at 84% 12%,rgba(102,133,255,.48) 0%,rgba(102,133,255,0) 32%),radial-gradient(circle at 14% 82%,rgba(54,214,196,.44) 0%,rgba(54,214,196,0) 34%),radial-gradient(circle at 92% 84%,rgba(255,183,88,.35) 0%,rgba(255,183,88,0) 28%),linear-gradient(152deg,#050913,#121a30 58%,#091126 100%);background-attachment:fixed;color:#eaf3ff}
+    .wrap{min-height:100vh;display:grid;place-items:center;padding:.8rem}
+    .card{width:min(1020px,98vw);border:1px solid rgba(255,255,255,.2);border-radius:20px;padding:1rem;background:rgba(8,14,28,.7);backdrop-filter:blur(14px)}
+    h1{margin:.2rem 0 .4rem 0;text-align:center;font-size:clamp(1.6rem,4.8vw,2.9rem);letter-spacing:.04em;text-transform:uppercase}
+    .sub{text-align:center;color:#cae0ff;margin-bottom:.7rem}
+    .nav{display:flex;justify-content:center;gap:.55rem;flex-wrap:wrap;margin-bottom:.45rem}
+    .nav a{color:#d8e8ff;text-decoration:none;border:1px solid rgba(255,255,255,.24);border-radius:999px;padding:.3rem .75rem;font-size:.92rem}
+    .content{border:1px solid rgba(255,255,255,.2);border-radius:12px;background:rgba(0,0,0,.2);padding:.8rem}
     .md h1,.md h2,.md h3{margin:.55rem 0 .4rem}
     .md p,.md li{line-height:1.5}
     .md code{background:rgba(255,255,255,.12);padding:.1rem .3rem;border-radius:6px}
+    @media (max-width:900px){.card{width:98vw}}
   </style>
   <script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']]}};</script>
   <script defer src='https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js'></script>
@@ -1021,7 +955,9 @@ INFO_PAGE = """
 <body>
   <div class='wrap'><section class='card'>
     <nav class='nav'><a href='/'>Home</a><a href='/about'>About</a><a href='/creators'>Creators</a></nav>
-    <article class='md'>{{ content_html|safe }}</article>
+    <h1>Heartflow</h1>
+    <p class='sub'>Secure AI signal studio · encrypted storage · quantum-inspired scoring</p>
+    <article class='md content'>{{ content_html|safe }}</article>
   </section></div>
 </body>
 </html>
@@ -1075,9 +1011,8 @@ PAGE = """
 
     <form method='post' action='/analyze' id='f'>
       <input type='hidden' name='csrf_token' value='{{ csrf_token }}'/>
-      <input type='hidden' name='captcha_id' value='{{ captcha.id }}'/>
       <div class='in'><span>@</span><input id='handle' name='handle' maxlength='15' placeholder='elonmusk' value='{{ handle_prefill }}' required/></div>
-      <div class='panel'><p class='meta'><strong>Verification:</strong> {{ captcha.prompt }}</p><div class='in'><textarea name='captcha_answer' maxlength='{{ captcha.max_chars }}' placeholder='Write your intent in 1-2 sentences' required style='width:100%;min-height:72px;background:transparent;color:#fff;border:none;outline:none;resize:vertical'></textarea></div><div class='in' style='margin-top:.5rem'><span>role</span><select name='actor_type' style='width:100%;background:transparent;color:#fff;border:none;outline:none'><option value='human'>human</option><option value='bot'>bot</option></select></div></div><div class='btn-wrap'><button id='train-btn' class='btn' type='submit'><span>⚡ Train HeartFlow Profile</span><span class='spin'></span></button></div>
+      <div class='btn-wrap'><button id='train-btn' class='btn' type='submit'><span>⚡ Train HeartFlow Profile</span><span class='spin'></span></button></div>
     </form>
     <div id='loader' class='loader'>Running secure analysis + future simulations…</div>
 
@@ -1099,8 +1034,6 @@ PAGE = """
     <div class='panel'><h3>Simulated Inner Narrative</h3><div class='markdown'>{{ result.simulated_inner_html|safe }}</div></div>
 
     <div class='panel'><h3>Lore Brief</h3><div class='markdown'>{{ result.lore_brief_html|safe }}</div></div>
-
-    {% if result.actor_type == 'bot' and result.bot_advice %}<div class='panel'><h3>Bot De-poisoning Protocol</h3><ul>{% for a in result.bot_advice %}<li>{{a}}</li>{% endfor %}</ul></div>{% endif %}
 
     {% if result.cognitive_insights %}<div class='panel'><h3>Cognitive Insights & Improvements</h3>{% for c in result.cognitive_insights %}<p><strong>{{c.signal}}</strong><br/>{{c.interpretation}}<br/><em>Improve:</em> {{c.improvement}}</p>{% endfor %}</div>{% endif %}
 
@@ -1163,7 +1096,7 @@ PAGE = """
 @app.get("/")
 def index():
     prefill = sanitize_text(request.args.get('handle', ''), 15)
-    return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=None, handle_prefill=prefill, captcha=issue_captcha())
+    return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=None, handle_prefill=prefill)
 
 
 @app.get("/about")
@@ -1187,23 +1120,18 @@ def analyze():
             recent=recent_analyses(),
             error="Session validation expired. Please submit again.",
             handle_prefill=request.form.get('handle', ''),
-            captcha=issue_captcha(),
         )
-    if not captcha_ok(request.form.get("captcha_id", ""), request.form.get("captcha_answer", "")):
-        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error="Intent gate denied (unsafe). Please rewrite with a constructive, prosocial intent.", handle_prefill=request.form.get('handle', ''), captcha=issue_captcha())
     if not rate_limit_ok(client_fingerprint()):
-        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error="Rate limit exceeded. Please wait and retry.", handle_prefill=request.form.get('handle', ''), captcha=issue_captcha())
+        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error="Rate limit exceeded. Please wait and retry.", handle_prefill=request.form.get('handle', ''))
     try:
         handle = sanitize_handle(request.form.get("handle", ""))
-        actor_type = sanitize_text(request.form.get("actor_type", "human"), 12).lower()
-        actor_type = "bot" if actor_type == "bot" else "human"
-        result = analyze_handle(handle, actor_type=actor_type)
+        result = analyze_handle(handle)
         save_analysis(handle, result)
-        return render_template_string(PAGE, csrf_token=csrf_token(), result=result, recent=recent_analyses(), error=None, handle_prefill=handle, captcha=issue_captcha())
+        return render_template_string(PAGE, csrf_token=csrf_token(), result=result, recent=recent_analyses(), error=None, handle_prefill=handle)
     except ComplianceError as exc:
-        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=sanitize_text(exc, 300), handle_prefill=request.form.get('handle', ''), captcha=issue_captcha())
+        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=sanitize_text(exc, 300), handle_prefill=request.form.get('handle', ''))
     except Exception as exc:
-        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=sanitize_text(exc, 300), handle_prefill=request.form.get('handle', ''), captcha=issue_captcha())
+        return render_template_string(PAGE, csrf_token=csrf_token(), result=None, recent=recent_analyses(), error=sanitize_text(exc, 300), handle_prefill=request.form.get('handle', ''))
 
 
 @app.get("/healthz")
