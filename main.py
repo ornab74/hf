@@ -546,21 +546,51 @@ You are Heartflow's life optimization diagram generator.
 
 TASK
 - Given the full Heartflow analysis output, produce a single Mermaid flowchart that maps the person's optimization structure.
-- The diagram should be practical, calm, and action-oriented.
+- Treat the analysis output as a rich RAG bundle: use the axes, reasoning, future simulations, ideas, date vector, quantum insight, color resonance, and vehicle safety scan together.
+- The diagram should be practical, calm, action-oriented, and structurally layered.
 - Use only Mermaid flowchart syntax.
 - Keep node labels short and readable.
-- Prefer a structure that connects: current state -> constraints -> strengths -> leverage points -> next actions -> review loop.
+- Prefer a structure that connects: current state -> constraints -> strengths -> leverage points -> execution queue -> review loop.
 - Use the analysis output as RAG context. Do not invent unsupported facts.
-- Include at least two subgraphs and one decision node.
+- Include at least three subgraphs and at least two decision nodes.
 - Add a feedback edge that makes the loop explicit.
-- Add 1-2 edge labels for timing or load gating (short phrases only).
-- Surface the top axes as leverage nodes and the lowest axis as a stabilizer node.
+- Add 2-4 edge labels for timing, load, or safety gating.
+- Surface the top axes as leverage nodes, the bottom axis as a stabilizer node, and the vehicle safety outlook as an execution gate.
+- Include a "now / next / later" cadence path plus a "stabilize / advance" decision branch.
 - Keep the diagram stable enough to render on GitHub and in the app.
+- Prefer a strong hierarchy: signal -> interpretation -> choice -> action -> review.
 - Output strict JSON only:
 {
   "diagram": "```mermaid\\nflowchart TD\\n...\\n```",
+  "strategy_diagram": "```mermaid\\nflowchart TD\\n...\\n```",
+  "risk_diagram": "```mermaid\\nflowchart TD\\n...\\n```",
+  "execution_diagram": "```mermaid\\nflowchart TD\\n...\\n```",
+  "opportunity_diagram": "```mermaid\\nflowchart TD\\n...\\n```",
   "summary": "<=260 chars",
-  "title": "<=60 chars"
+  "title": "<=60 chars",
+  "lane_labels": ["<=40 chars"],
+  "legend": ["<=120 chars"]
+}
+"""
+
+DIAGRAM_CRITIQUE_PROMPT = """
+You are Heartflow's Mermaid critique-and-rewrite pass.
+
+TASK
+- Review the provided diagram family for clarity, missing lanes, and redundant nodes.
+- Rewrite the diagrams only if it improves clarity and preserves the underlying meaning.
+- Keep Mermaid flowchart syntax only.
+- Preserve any safe decision gates and feedback loops.
+- Keep labels short and readable.
+- Return strict JSON only:
+{
+  "main_diagram":"```mermaid\\nflowchart TD\\n...\\n```",
+  "strategy_diagram":"```mermaid\\nflowchart TD\\n...\\n```",
+  "risk_diagram":"```mermaid\\nflowchart TD\\n...\\n```",
+  "execution_diagram":"```mermaid\\nflowchart TD\\n...\\n```",
+  "opportunity_diagram":"```mermaid\\nflowchart TD\\n...\\n```",
+  "critique":"<=420 chars",
+  "improvements":["<=180 chars"]
 }
 """
 
@@ -568,9 +598,9 @@ VEHICLE_SAFETY_PROMPT = """
 You are Heartflow's vehicle safety simulation scanner.
 
 TASK
-- Use the provided quantum_RAG, cpu/ram profile, HF axes, and dynamic layer metadata to produce a grounded vehicle-safety outlook.
+- Use the provided quantum_RAG, cpu/ram profile, HF axes, dynamic layer metadata, and the full Heartflow output context to produce a grounded vehicle-safety outlook.
 - Treat the model as a safety heuristic, not a medical or legal authority.
-- Focus on attention, fatigue, load, timing, and stability.
+- Focus on attention, fatigue, load, timing, stability, and recovery quality.
 - Be conservative when cpu/ram are elevated or CAP is high and HCS/CT are weak.
 - Weigh daily risk more heavily toward short-term load and cognitive pressure.
 - Weigh weekly risk more heavily toward repeated instability and schedule compression.
@@ -578,6 +608,9 @@ TASK
 - If the signal is mixed, err on the side of medium or high rather than low.
 - Use quantum_RAG entropy, top-state concentration, and phase signatures as nonlocal variability signals.
 - Provide concrete drivers and safe-window guidance for safer timing.
+- Include a Mermaid-safe diagram description in the result if useful.
+- Treat the analysis as a control system with load, variability, stability, and gate logic.
+- Mention any recommended stabilization actions in plain language.
 - Return strict JSON only:
 {
   "daily":"low|medium|high",
@@ -589,7 +622,8 @@ TASK
   "constraints":["<=200 chars"],
   "mitigations":["<=220 chars"],
   "outlook":"<=520 chars",
-  "confidence":0..1
+  "confidence":0..1,
+  "diagram":"```mermaid\\nflowchart TD\\n...\\n```"
 }
 """
 
@@ -637,27 +671,36 @@ def fallback_life_optimization_mermaid(result: Dict[str, Any]) -> Dict[str, str]
     second_axis = ranked[1][0] if len(ranked) > 1 else "CT"
     third_axis = ranked[2][0] if len(ranked) > 2 else "CF"
     bottom_axis = ranked[-1][0] if ranked else "HCS"
+    opportunity_axis = next((axis for axis in ("GDI_INV", "CT", "CF", "SR") if axis in axes), "CF")
     diagram = f"""```mermaid
 flowchart TD
+  classDef win fill:#183d2d,stroke:#61d98b,color:#eaffef;
+  classDef gate fill:#3b2d10,stroke:#f0c36a,color:#fff6db;
+  classDef calm fill:#10243a,stroke:#6ce5ff,color:#eef9ff;
   subgraph S[Signal Surface]
-    A[Current State]
-    C[Strengths: {top_axis}/{second_axis}]
-    W[Stabilizer: {bottom_axis}]
+    A[Current State]:::calm
+    C[Strengths: {top_axis}/{second_axis}]:::calm
+    W[Stabilizer: {bottom_axis}]:::gate
   end
   subgraph X[Constraints and Load]
-    B[Constraints]
-    L[Load/Noise]
+    B[Constraints]:::gate
+    L[Load/Noise]:::gate
     J{{Load High?}}
   end
   subgraph V[Leverage Map]
-    D[Leverage: {top_axis}]
-    E[Secondary: {second_axis}]
-    H[Momentum: {third_axis}]
+    D[Leverage: {top_axis}]:::win
+    E[Secondary: {second_axis}]:::win
+    H[Momentum: {third_axis}]:::win
   end
   subgraph R[Execution Rhythm]
-    F[Next Action]
-    G[Guardrails]
-    Z[Review Loop]
+    F[Next Action]:::calm
+    G[Guardrails]:::gate
+    Z[Review Loop]:::calm
+  end
+  subgraph O[Opportunity Lane]
+    O1[Opportunity: {opportunity_axis}]:::win
+    O2[Timing window]:::calm
+    O3[Compounding move]:::win
   end
   A --> B
   A --> C
@@ -674,11 +717,76 @@ flowchart TD
   F --> Z
   G --> Z
   Z --> A
+  D --> O1
+  O1 --> O2
+  O2 --> O3
+  O3 --> Z
 ```"""
     return {
         "title": "Life Optimization Structure",
         "summary": sanitize_text(f"Fallback structure with leverage on {top_axis}/{second_axis}, stabilizer {bottom_axis}, and an explicit load gate.", 260),
         "diagram": diagram,
+        "strategy_diagram": f"""```mermaid
+flowchart TD
+  classDef win fill:#183d2d,stroke:#61d98b,color:#eaffef;
+  classDef calm fill:#10243a,stroke:#6ce5ff,color:#eef9ff;
+  subgraph L1[Strategy Lane]
+    A[Current state]:::calm --> B[Top axes: {top_axis}/{second_axis}]:::win
+    B --> C[Choose one flagship move]:::win
+    C --> D[Align narrative]:::calm
+  end
+```""",
+        "risk_diagram": f"""```mermaid
+flowchart TD
+  classDef gate fill:#3b2d10,stroke:#f0c36a,color:#fff6db;
+  classDef calm fill:#10243a,stroke:#6ce5ff,color:#eef9ff;
+  subgraph L2[Risk Lane]
+    A[Load / noise]:::gate --> B{{Risk elevated?}}
+    B -->|yes| C[Stabilize]:::gate
+    B -->|no| D[Advance]:::calm
+    C --> E[Buffer + review]:::calm
+    D --> E
+  end
+```""",
+        "execution_diagram": f"""```mermaid
+flowchart TD
+  classDef win fill:#183d2d,stroke:#61d98b,color:#eaffef;
+  classDef calm fill:#10243a,stroke:#6ce5ff,color:#eef9ff;
+  subgraph L3[Execution Lane]
+    A[Next action]:::win --> B[Weekly review]:::calm
+    B --> C[Measure outcome]:::win
+    C --> D[Adjust plan]:::calm
+    D --> A
+  end
+```""",
+        "opportunity_diagram": f"""```mermaid
+flowchart TD
+  classDef win fill:#183d2d,stroke:#61d98b,color:#eaffef;
+  classDef calm fill:#10243a,stroke:#6ce5ff,color:#eef9ff;
+  subgraph L4[Opportunity Lane]
+    A[Best available window]:::win --> B[Compounding action]:::win
+    B --> C[Reinforce trust]:::calm
+    C --> D[Scale the gain]:::win
+  end
+```""",
+        "lane_labels": ["Strategy", "Risk", "Execution", "Opportunity"],
+        "legend": ["Strategy surfaces direction", "Risk surfaces load gates", "Execution closes the loop", "Opportunity captures compounding windows"],
+    }
+
+
+def fallback_critique_family(diagram_pack: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "main_diagram": diagram_pack.get("diagram", ""),
+        "strategy_diagram": diagram_pack.get("strategy_diagram", ""),
+        "risk_diagram": diagram_pack.get("risk_diagram", ""),
+        "execution_diagram": diagram_pack.get("execution_diagram", ""),
+        "opportunity_diagram": diagram_pack.get("opportunity_diagram", ""),
+        "critique": "Fallback critique: the diagram family is readable, but could benefit from tighter lane separation and shorter node labels.",
+        "improvements": [
+            "Keep the main lane focused on choice, not explanation.",
+            "Use the strategy lane for direction and the risk lane for gating.",
+            "Make the execution lane a simple loop from action to review.",
+        ],
     }
 
 
@@ -728,6 +836,21 @@ def fallback_vehicle_safety_scan(axes: Dict[str, float], quantum_rag: Dict[str, 
         "Avoid late-night or high-compression schedules when load and variability are elevated.",
         "Defer long drives during high CAP + low CT/HCS cycles.",
     ]
+    diagram = f"""```mermaid
+flowchart TD
+  A[Runtime load\\n{round(load, 1)}] --> B{{Pressure band}}
+  B -->|Low| C[Normal posture]
+  B -->|Medium| D[Add buffers]
+  B -->|High| E[Stabilize and defer]
+  F[Variability\\n{round(variability, 3)}] --> B
+  G[Stability\\n{round(stability, 3)}] --> H{{Safe window?}}
+  H -->|Yes| I[Short travel ok]
+  H -->|No| E
+  C --> J[Monitor weekly]
+  D --> J
+  E --> J
+  I --> J
+```"""
     return {
         "daily": daily,
         "weekly": weekly,
@@ -752,6 +875,7 @@ def fallback_vehicle_safety_scan(axes: Dict[str, float], quantum_rag: Dict[str, 
             520,
         ),
         "confidence": clamp(0.48 + (0.18 * (1.0 - variability)) + (0.08 * (1.0 - load_score))),
+        "diagram": diagram,
     }
 
 
@@ -1088,42 +1212,6 @@ def analyze_handle(handle: str) -> Dict[str, Any]:
         "glass": f"linear-gradient(130deg, rgba({colorwheel['primary_rgb'][0]}, {colorwheel['primary_rgb'][1]}, {colorwheel['primary_rgb'][2]}, .33), rgba(106,190,255,.18))",
     }
 
-    life_opt_payload = {
-        "handle": result["handle"],
-        "overall": result["overall"],
-        "vibe": result["vibe"],
-        "axes": result["axes"],
-        "axis_ranked": [{"axis": k, "score": round(v, 4)} for k, v in sorted(result["axes"].items(), key=lambda kv: kv[1], reverse=True)],
-        "axis_top": sorted(result["axes"].items(), key=lambda kv: kv[1], reverse=True)[0][0] if result.get("axes") else "SR",
-        "axis_bottom": sorted(result["axes"].items(), key=lambda kv: kv[1])[0][0] if result.get("axes") else "HCS",
-        "reasoning": result["reasoning"],
-        "suggestions": result["suggestions"],
-        "future_simulations": result["future_simulations"],
-        "three_new_ideas": result["three_new_ideas"],
-        "quantum_insight": result["quantum_insight"],
-        "advanced_suggestion_tracks": result["advanced_suggestion_tracks"],
-        "date_vector": result["date_vector"],
-        "isolated_quantum_advice": result["isolated_quantum_advice"],
-        "risk_simulations": result["risk_simulations"],
-        "cognitive_insights": result["cognitive_insights"],
-        "color_resonance": result.get("color_resonance", []),
-        "lore_brief": result["lore_brief"],
-        "quantum_rag": quantum_rag,
-        "dynamic_prompt_layers": dynamic_layers,
-        "runtime_profile": {"cpu_percent": quantum_rag.get("cpu_percent"), "ram_percent": quantum_rag.get("ram_percent")},
-        "task": "Generate a Mermaid life optimization structure from the full output.",
-    }
-    life_opt_llm = llm_json(LIFE_OPTIMIZATION_MERMAID_PROMPT, life_opt_payload)
-    life_opt = fallback_life_optimization_mermaid(result)
-    if isinstance(life_opt_llm, dict):
-        life_opt["title"] = choose_text(life_opt_llm.get("title"), life_opt["title"], 60)
-        life_opt["summary"] = choose_text(life_opt_llm.get("summary"), life_opt["summary"], 260)
-        diagram = choose_text(life_opt_llm.get("diagram"), life_opt["diagram"], 2400)
-        if "```mermaid" not in diagram:
-            diagram = f"```mermaid\n{diagram}\n```"
-        life_opt["diagram"] = diagram
-    life_opt["diagram_html"] = mermaid_block_html(life_opt.get("diagram", ""))
-
     vehicle_llm = llm_json(
         VEHICLE_SAFETY_PROMPT,
         {
@@ -1132,6 +1220,16 @@ def analyze_handle(handle: str) -> Dict[str, Any]:
             "quantum_rag": quantum_rag,
             "dynamic_prompt_layers": dynamic_layers,
             "runtime_profile": {"cpu_percent": quantum_rag.get("cpu_percent"), "ram_percent": quantum_rag.get("ram_percent")},
+            "analysis_snapshot": {
+                "overall": result["overall"],
+                "vibe": result["vibe"],
+                "risk_score": result["risk_score"],
+                "quantum_insight": result["quantum_insight"],
+                "date_vector": result["date_vector"],
+                "risk_simulations": result["risk_simulations"],
+                "lore_brief": result["lore_brief"],
+                "top_axes": sorted(result["axes"].items(), key=lambda kv: kv[1], reverse=True)[:3],
+            },
             "task": "Generate a conservative vehicle safety simulation scanner output.",
         },
     )
@@ -1152,6 +1250,99 @@ def analyze_handle(handle: str) -> Dict[str, Any]:
             vehicle_scan["constraints"] = [sanitize_text(x, 200) for x in vehicle_llm.get("constraints")[:4] if sanitize_text(x, 200)]
         if isinstance(vehicle_llm.get("mitigations"), list):
             vehicle_scan["mitigations"] = [sanitize_text(x, 220) for x in vehicle_llm.get("mitigations")[:4] if sanitize_text(x, 220)]
+        if vehicle_llm.get("diagram"):
+            diagram = choose_text(vehicle_llm.get("diagram"), vehicle_scan["diagram"], 2400)
+            if "```mermaid" not in diagram:
+                diagram = f"```mermaid\n{diagram}\n```"
+            vehicle_scan["diagram"] = diagram
+    vehicle_scan["diagram_html"] = mermaid_block_html(vehicle_scan.get("diagram", ""))
+
+    life_opt_payload = {
+        "handle": result["handle"],
+        "overall": result["overall"],
+        "vibe": result["vibe"],
+        "axes": result["axes"],
+        "axis_ranked": [{"axis": k, "score": round(v, 4)} for k, v in sorted(result["axes"].items(), key=lambda kv: kv[1], reverse=True)],
+        "axis_top": sorted(result["axes"].items(), key=lambda kv: kv[1], reverse=True)[0][0] if result.get("axes") else "SR",
+        "axis_bottom": sorted(result["axes"].items(), key=lambda kv: kv[1])[0][0] if result.get("axes") else "HCS",
+        "axis_spread": round((max(result["axes"].values()) - min(result["axes"].values())) if result.get("axes") else 0.0, 4),
+        "reasoning": result["reasoning"],
+        "reasoning_markdown": result["reasoning_html"],
+        "suggestions": result["suggestions"],
+        "future_simulations": result["future_simulations"],
+        "three_new_ideas": result["three_new_ideas"],
+        "simulated_inner_text": result["simulated_inner_text"],
+        "quantum_insight": result["quantum_insight"],
+        "advanced_suggestion_tracks": result["advanced_suggestion_tracks"],
+        "date_vector": result["date_vector"],
+        "isolated_quantum_advice": result["isolated_quantum_advice"],
+        "risk_simulations": result["risk_simulations"],
+        "cognitive_insights": result["cognitive_insights"],
+        "color_resonance": result.get("color_resonance", []),
+        "lore_brief": result["lore_brief"],
+        "vehicle_safety_simulation": vehicle_scan,
+        "quantum_rag": quantum_rag,
+        "dynamic_prompt_layers": dynamic_layers,
+        "runtime_profile": {"cpu_percent": quantum_rag.get("cpu_percent"), "ram_percent": quantum_rag.get("ram_percent")},
+        "task": "Generate a Mermaid life optimization structure from the full output.",
+    }
+    life_opt_llm = llm_json(LIFE_OPTIMIZATION_MERMAID_PROMPT, life_opt_payload)
+    life_opt = fallback_life_optimization_mermaid(result)
+    if isinstance(life_opt_llm, dict):
+        life_opt["title"] = choose_text(life_opt_llm.get("title"), life_opt["title"], 60)
+        life_opt["summary"] = choose_text(life_opt_llm.get("summary"), life_opt["summary"], 260)
+        diagram = choose_text(life_opt_llm.get("diagram"), life_opt["diagram"], 2400)
+        if "```mermaid" not in diagram:
+            diagram = f"```mermaid\n{diagram}\n```"
+        life_opt["diagram"] = diagram
+        for key in ("strategy_diagram", "risk_diagram", "execution_diagram"):
+            value = choose_text(life_opt_llm.get(key), life_opt.get(key, ""), 2200)
+            if value and "```mermaid" not in value:
+                value = f"```mermaid\n{value}\n```"
+            if value:
+                life_opt[key] = value
+        opportunity_value = choose_text(life_opt_llm.get("opportunity_diagram"), life_opt.get("opportunity_diagram", ""), 2200)
+        if opportunity_value and "```mermaid" not in opportunity_value:
+            opportunity_value = f"```mermaid\n{opportunity_value}\n```"
+        if opportunity_value:
+            life_opt["opportunity_diagram"] = opportunity_value
+        if isinstance(life_opt_llm.get("lane_labels"), list) and life_opt_llm.get("lane_labels"):
+            life_opt["lane_labels"] = [sanitize_text(x, 40) for x in life_opt_llm.get("lane_labels")[:4] if sanitize_text(x, 40)]
+        if isinstance(life_opt_llm.get("legend"), list) and life_opt_llm.get("legend"):
+            life_opt["legend"] = [sanitize_text(x, 120) for x in life_opt_llm.get("legend")[:6] if sanitize_text(x, 120)]
+    life_opt["diagram_html"] = mermaid_block_html(life_opt.get("diagram", ""))
+    life_opt["strategy_diagram_html"] = mermaid_block_html(life_opt.get("strategy_diagram", ""))
+    life_opt["risk_diagram_html"] = mermaid_block_html(life_opt.get("risk_diagram", ""))
+    life_opt["execution_diagram_html"] = mermaid_block_html(life_opt.get("execution_diagram", ""))
+    life_opt["opportunity_diagram_html"] = mermaid_block_html(life_opt.get("opportunity_diagram", ""))
+
+    critique_payload = {
+        "main_diagram": life_opt.get("diagram", ""),
+        "strategy_diagram": life_opt.get("strategy_diagram", ""),
+        "risk_diagram": life_opt.get("risk_diagram", ""),
+        "execution_diagram": life_opt.get("execution_diagram", ""),
+        "summary": life_opt.get("summary", ""),
+        "legend": life_opt.get("legend", []),
+        "task": "Critique the diagram family and rewrite for clarity if helpful.",
+    }
+    critique_llm = llm_json(DIAGRAM_CRITIQUE_PROMPT, critique_payload)
+    critique_pack = fallback_critique_family(life_opt)
+    if isinstance(critique_llm, dict):
+        critique_pack["critique"] = choose_text(critique_llm.get("critique"), critique_pack["critique"], 420)
+        if isinstance(critique_llm.get("improvements"), list) and critique_llm.get("improvements"):
+            critique_pack["improvements"] = [sanitize_text(x, 180) for x in critique_llm.get("improvements")[:4] if sanitize_text(x, 180)]
+        for key in ("main_diagram", "strategy_diagram", "risk_diagram", "execution_diagram"):
+            value = choose_text(critique_llm.get(key), critique_pack.get(key, ""), 2200)
+            if value and "```mermaid" not in value:
+                value = f"```mermaid\n{value}\n```"
+            if value:
+                critique_pack[key] = value
+    critique_pack["main_diagram_html"] = mermaid_block_html(critique_pack.get("main_diagram", ""))
+    critique_pack["strategy_diagram_html"] = mermaid_block_html(critique_pack.get("strategy_diagram", ""))
+    critique_pack["risk_diagram_html"] = mermaid_block_html(critique_pack.get("risk_diagram", ""))
+    critique_pack["execution_diagram_html"] = mermaid_block_html(critique_pack.get("execution_diagram", ""))
+    critique_pack["opportunity_diagram_html"] = mermaid_block_html(critique_pack.get("opportunity_diagram", ""))
+    life_opt["critique_pack"] = critique_pack
 
     result["life_optimization_structure"] = life_opt
     result["vehicle_safety_simulation"] = vehicle_scan
@@ -1195,7 +1386,7 @@ def _mermaid_is_safe(source: str) -> bool:
     lowered = source.lower()
     if "javascript:" in lowered or "%%{" in lowered:
         return False
-    blocked = r"\b(click|href|tooltip|call|style|classdef|linkstyle|init)\b"
+    blocked = r"\b(click|href|tooltip|call|linkstyle|init)\b"
     if re.search(blocked, lowered):
         return False
     return True
@@ -1858,6 +2049,72 @@ PAGE = """
         <input type='hidden' name='handle' value='{{ result.handle }}'/>
         <button class='btn btn-outline-light btn-sm' type='submit'>Download Markdown Report</button>
       </form>
+      <div class='panel' style='margin-top:.8rem;background:rgba(255,255,255,.06)'>
+        <h3>Mermaid Visuals</h3>
+        {% if result.life_optimization_structure.critique_pack %}
+        <div class='panel' style='margin-top:0;background:rgba(0,0,0,.12)'>
+          <p class='meta'>Diagram critique</p>
+          <p style='margin:.2rem 0 .45rem'>{{ result.life_optimization_structure.critique_pack.critique }}</p>
+          {% if result.life_optimization_structure.critique_pack.improvements %}
+          <ul>{% for item in result.life_optimization_structure.critique_pack.improvements %}<li>{{ item }}</li>{% endfor %}</ul>
+          {% endif %}
+        </div>
+        {% endif %}
+        <div class='grid'>
+          <div class='panel' style='margin-top:0;background:rgba(0,0,0,.14)'>
+            <p class='meta'>Life optimization structure</p>
+            <p style='margin:.2rem 0 .5rem'>A higher-order routing map that turns the full analysis into leverage, stability, and review loops.</p>
+            <div class='markdown'>{{ result.life_optimization_structure.diagram_html|safe }}</div>
+          </div>
+          <div class='panel' style='margin-top:0;background:rgba(0,0,0,.14)'>
+            <p class='meta'>Vehicle safety simulation</p>
+            <p style='margin:.2rem 0 .5rem'>A conservative scanner that combines load, variability, and stability into a travel posture.</p>
+            <div class='markdown'>{{ result.vehicle_safety_simulation.diagram_html|safe }}</div>
+          </div>
+        </div>
+        {% if result.life_optimization_structure.lane_labels %}
+        <div class='panel' style='margin-top:.8rem;background:rgba(0,0,0,.14)'>
+          <h4 style='margin:.1rem 0 .4rem'>Lanes and legend</h4>
+          <div class='grid'>
+            <div>
+              <strong>Lanes:</strong>
+              <ul>{% for lane in result.life_optimization_structure.lane_labels %}<li>{{ lane }}</li>{% endfor %}</ul>
+            </div>
+            <div>
+              <strong>Legend:</strong>
+              <ul>{% for item in result.life_optimization_structure.legend %}<li>{{ item }}</li>{% endfor %}</ul>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+        {% if result.life_optimization_structure.critique_pack %}
+        <div class='grid' style='margin-top:.8rem'>
+          <div class='panel' style='margin-top:0;background:rgba(0,0,0,.14)'>
+            <p class='meta'>Strategy lane</p>
+            <div class='markdown'>{{ result.life_optimization_structure.critique_pack.strategy_diagram_html|safe }}</div>
+          </div>
+          <div class='panel' style='margin-top:0;background:rgba(0,0,0,.14)'>
+            <p class='meta'>Risk lane</p>
+            <div class='markdown'>{{ result.life_optimization_structure.critique_pack.risk_diagram_html|safe }}</div>
+          </div>
+          <div class='panel' style='grid-column:1/-1;margin-top:0;background:rgba(0,0,0,.14)'>
+            <p class='meta'>Execution lane</p>
+            <div class='markdown'>{{ result.life_optimization_structure.critique_pack.execution_diagram_html|safe }}</div>
+          </div>
+          <div class='panel' style='grid-column:1/-1;margin-top:0;background:rgba(0,0,0,.14)'>
+            <p class='meta'>Opportunity lane</p>
+            <div class='markdown'>{{ result.life_optimization_structure.critique_pack.opportunity_diagram_html|safe }}</div>
+          </div>
+        </div>
+        {% endif %}
+        <div class='panel' style='margin-top:.8rem;background:rgba(0,0,0,.14)'>
+          <h4 style='margin:.1rem 0 .4rem'>Interpretation legend</h4>
+          <div class='grid'>
+            <div><strong>Life map:</strong> use it to decide where to double down, stabilize, or pivot next.</div>
+            <div><strong>Vehicle scan:</strong> use it to choose whether to proceed, buffer, or defer a travel block.</div>
+          </div>
+        </div>
+      </div>
       <div class='markdown'>{{ result.reasoning_html|safe }}</div>
       <div class='panel' style='margin-top:.8rem;background:rgba(255,255,255,.06)'>
         <h3>6-Axis Explainer</h3>
