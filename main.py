@@ -346,12 +346,6 @@ def client_fingerprint() -> str:
     ua = request.headers.get("User-Agent", "unknown")[:160]
     return f"{ip}|{ua}"
 
-def client_fingerprint() -> str:
-    hdr = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-    ip = hdr or request.remote_addr or "unknown"
-    ua = request.headers.get("User-Agent", "unknown")[:160]
-    return f"{ip}|{ua}"
-
 
 def rate_limit_ok(key: str) -> bool:
     now = time.time()
